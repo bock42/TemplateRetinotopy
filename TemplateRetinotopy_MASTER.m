@@ -5,6 +5,7 @@
 %   MRklar - v1.0.0
 
 %% Set session and subject name
+logDir = '/data/jet/abock/LOGS';
 templateDir = '/data/jet/abock/data/Retinotopy_Templates/fsaverage_sym';
 sessions = {...
     '/data/jet/abock/data/Retinotopy_Templates/AEK/10012014/' ...
@@ -29,7 +30,6 @@ for ss = 1:length(sessions)
     if ~exist(outDir,'dir')
         mkdir(outDir);
     end
-    logDir = '/data/jet/abock/LOGS';
     numRuns = 6; % number of bold runs
     reconall = 0;
     slicetiming = 1; % correct slice timings
@@ -117,19 +117,42 @@ tDir = fullfile(templateDir,'pRFs','coarse_model_templates');
 tFiles = listdir(fullfile(tDir,'*.nii.gz'),'files');
 hemi = 'lh';
 srcsubject = 'fsaverage_sym';
+mem = 5;
 for ss = 1:length(sessions)
     session_dir = sessions{ss};
     subject_name = subjects{ss};
+    submit_name = jobNames{ss};
+    outDir = fullfile(session_dir,'project_templates_scripts');
+    if ~exist(outDir,'dir')
+        mkdir(outDir);
+    end
     sDir = fullfile(session_dir,'pRFs','coarse_model_templates');
     if ~exist(sDir,'dir')
         mkdir(sDir);
     end
+    job_string = cell(1,length(tFiles));
     for tt = 1:length(tFiles);
         sval = fullfile(tDir,tFiles{tt});
         tval = fullfile(sDir,tFiles{tt});
-        mri_surf2surf(srcsubject,subject_name,sval,tval,hemi);
+        job_name = tFiles{tt};
+        matlab_string = ['mri_surf2surf(''' srcsubject ''',''' subject_name ''',''' ...
+            sval ''',''' tval ''',''' hemi ''');'];
+        create_job_shell(outDir,job_name,matlab_string);
+        job_string{tt} = fullfile(outDir,[job_name '.sh']);
     end
+    create_submit_shell(outDir,logDir,submit_name,job_string,mem)
 end
+
+
+
+
+
+
+
+
+
+
+
 %%
     decimate_templates(subject_name,tDir);
 decimate_bold(session_dir,subject_name,func);
