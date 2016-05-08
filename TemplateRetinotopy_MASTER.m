@@ -64,7 +64,7 @@ end
 for ss = 1:length(sessions)
     session_dir = sessions{ss};
     subject_name = subjects{ss};
-    tDir = fullfile(session_dir,'pRFs','anat_templates');
+    tDir = fullfile(session_dir,'anat_templates');
     decimate_templates(subject_name,tDir);
 end
 %% pRF analysis
@@ -101,9 +101,9 @@ end
 %    fullfile(templateDir,'pRFs','coarse_model_templates');
 %
 %% Copy an anatomical template, to be used later
-mkdir(fullfile(templateDir,'pRFs','anat_templates'));
+mkdir(fullfile(templateDir,'anat_templates'));
 system(['cp ~/data/2014-10-29.areas-template.nii.gz ' ...
-    fullfile(templateDir,'pRFs','anat_templates','lh.areas.nii.gz')]);
+    fullfile(templateDir,'anat_templates','lh.areas.anat.nii.gz')]);
 %% Convert coarse_model_templates, decimate
 %   Takes the .mgz output from Mathematica (above), convertes to nii.gz and
 %   separates out the pol, ecc, and areas maps into individual volumes.
