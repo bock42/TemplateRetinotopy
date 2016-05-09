@@ -54,6 +54,16 @@ end
 %   for example:
 %   sh /data/jet/abock/data/Retinotopy_Template/AEK/10012014/preprocessing_scripts/submit_A102714B_all.sh
 
+%% Temporally filter the rf.nii.gz
+func = 'rf';
+for ss = 1:length(sessions)
+    session_dir = sessions{ss};
+    boldDirs = find_bold(session_dir);
+    for i = 1:length(boldDirs)
+        runNum = i;
+        temporal_filter(session_dir,runNum,func,filtType);
+    end
+end
 %% Project retinotopic templates to subject space
 for ss = 1:length(sessions)
     session_dir = sessions{ss};
