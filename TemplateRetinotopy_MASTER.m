@@ -24,6 +24,10 @@ pRFruns = {[1,2,5] [1,3,5] [1,3,5]};
 movieRuns = {'[3,4,6]','[2,4,6]','[2,4,6]'};
 surfFunc = 's5.wdrf.tf.surf';
 volFunc = 's5.wdrf.tf';
+hemis = {'lh' 'rh'};
+templateType = 'coarse';
+func = 's5.wdrf.tf';
+fitType = 'V2V3';
 %% Run preprocessing
 for ss = 1:length(sessions)
     session_dir = sessions{ss};
@@ -163,11 +167,11 @@ for ss = 1:length(sessions)
             job_name = [hemi tFiles{tt}(3:end)];
             tval = fullfile(sDir,job_name);
             if strcmp(hemi,'lh')
-            matlab_string = ['mri_surf2surf(''' srcsubject ''',''' subject_name ''',''' ...
-                sval ''',''' tval ''',''lh'');'];
+                matlab_string = ['mri_surf2surf(''' srcsubject ''',''' subject_name ''',''' ...
+                    sval ''',''' tval ''',''lh'');'];
             else
                 matlab_string = ['mri_surf2surf(''' srcsubject ''',''' subject_name '/xhemi'',''' ...
-                sval ''',''' tval ''',''lh'');']; 
+                    sval ''',''' tval ''',''lh'');'];
             end
             create_job_shell(outDir,job_name,matlab_string);
             job_string{ct} = fullfile(outDir,[job_name '.sh']);
@@ -180,7 +184,7 @@ end
 %   sh /data/jet/abock/data/Retinotopy_Templates/AEK/10012014/project_templates_scripts/A100114K.sh
 
 %% Decimate the templates
-for ss = 1:length(sessions)
+for ss = 1:2%length(sessions)
     session_dir = sessions{ss};
     subject_name = subjects{ss};
     tDir = fullfile(session_dir,'pRFs','coarse_model_templates');
@@ -233,9 +237,9 @@ for ss = 1:length(script_dirs)
             hemi = hemis{hh};
             system(['rm ' fullfile(logDir,'*')]);
             pause(5);
-             scriptDir = fullfile(script_dir,cDirs{i});
-             cd(scriptDir);
-             inScript=['submit_' hemi '_regress.sh'];
+            scriptDir = fullfile(script_dir,cDirs{i});
+            cd(scriptDir);
+            inScript=['submit_' hemi '_regress.sh'];
             system(['sh ' fullfile(scriptDir,inScript)]);
             disp(['running ' fullfile(scriptDir,inScript)]);
             pause(5);
@@ -275,10 +279,10 @@ hemis = {'lh' 'rh'};
 templateType = 'coarse';
 func = 's5.wdrf.tf';
 fitType = 'V2V3'; % 'V1 = V1<->V2, V1<->V3; 'V2V3' =  V1<->V2, V1<->V3, AND V2<->V3
-for ss = 1%:length(sessions)
+for ss = 2%:length(sessions)
     session_dir = sessions{ss};
     disp(session_dir);
-    for hh = 1%:length(hemis)
+    for hh = 1:length(hemis)
         hemi = hemis{hh};
         disp(hemi);
         tDir = fullfile(session_dir,'pRFs',templateType,func,'Movie',fitType);
@@ -299,103 +303,197 @@ for ss = 1%:length(sessions)
     end
 end
 %%
+%% Fine/Anat - Get the error in eccentricity and polar angle from the 'best' template
 
-%%% finalized code up to here %%%
-
-%%
-
-%%
-session_dir = '/Volumes/ExFat5TB/data/jet/abock/data/Retinotopy_Templates/AEK/10012014';
-rawsession_dir = '/Volumes/ExFat5TB/data/jet/abock/data/Template_Retinotopy/AEK/10012014';
-template = 'anat';
-func = 's5.wdrf.tf';
-fitType = 'V1';
+templates = {'coarse' 'anat' 'anat_undeformed' 'raw'};
 cond = 'Movie';
-templates = {'pRF' 'coarse' 'anat' 'raw'};
-hemi = 'lh';
-hh = 1;
-ss = 1;
+
+% 0.9 quantile
+% threshs = {...
+%     [0.615336 0.601443] ...
+%     [0.966994 0.905074] ...
+%     [0.842821 0.837896] ...
+%     };
+
+% 0.7 quantile
+threshs = {...
+    [0.26565 0.26835] ...
+    [0.376155 0.436235] ...
+    [0.410236 0.370474] ...
+    };
+
+
+
 for tt = 1:length(templates)
     template = templates{tt};
-    vdir = fullfile(session_dir,'pRFs',template,func,cond,fitType);
-    if strcmp(template,'coarse')
-        tdir = fullfile(session_dir,'pRFs',[template '_model_templates']);
-        [~,~,sorted_templates] = find_best_template(template,vdir,hemi,[],[],[],fitType);
-        dotinds = strfind(sorted_templates{1},'.');
-        % load the 'best' pol template
-        pol = load_nifti(fullfile(tdir,...
-            [hemi '.pol.' sorted_templates{1}(dotinds(1)+1:dotinds(4)-1) '.nii.gz']));
-        % load the 'best' ecc template
-        ecc = load_nifti(fullfile(tdir,...
-            [hemi '.ecc.' sorted_templates{1}(dotinds(1)+1:dotinds(4)-1) '.nii.gz']));
-        % load the 'best' ecc template
-        areas = load_nifti(fullfile(tdir,...
-            [hemi '.areas.' sorted_templates{1}(dotinds(1)+1:dotinds(4)-1) '.nii.gz']));
-        % pull out vals
-        allVals{tt,ss,hh,1} = squeeze(pol.vol(:));
-        allVals{tt,ss,hh,2} = squeeze(ecc.vol(:));
-        allVals{tt,ss,hh,3} = squeeze(areas.vol(:));
-    elseif strcmp(template,'pRF') || strcmp(template,'anat')
-        tdir = fullfile(rawsession_dir,'pRFs',[template '_templates']);
-        % load the 'best' pol template
-        pol = load_nifti(fullfile(tdir,[hemi '.pol.' template '.nii.gz']));
-        % load the 'best' ecc template
-        ecc = load_nifti(fullfile(tdir,[hemi '.ecc.' template '.nii.gz']));
-        % load the 'best' ecc template
-        areas = load_nifti(fullfile(tdir,[hemi '.areas.' template '.nii.gz']));
-        % pull out vals
-        allVals{tt,ss,hh,1} = squeeze(pol.vol(:));
-        allVals{tt,ss,hh,2} = squeeze(ecc.vol(:));
-        allVals{tt,ss,hh,3} = squeeze(areas.vol(:));
-    elseif strcmp(template,'raw')
-        tdir = fullfile(session_dir,'pRFs');
-        % load the 'best' pol template
-        pol = load_nifti(fullfile(tdir,[hemi '.cortex.avg.copol.prfs.nii.gz']));
-        % load the 'best' ecc template
-        ecc = load_nifti(fullfile(tdir,[hemi '.cortex.avg.coecc.prfs.nii.gz']));
-        % load the 'best' co template
-        co = load_nifti(fullfile(tdir,[hemi '.cortex.avg.co.prfs.nii.gz']));
-        % pull out vals
-        allVals{tt,ss,hh,1} = squeeze(pol.vol(:));
-        allVals{tt,ss,hh,2} = squeeze(ecc.vol(:));
-        allVals{tt,ss,hh,3} = squeeze(co.vol(:));
+    for ss = 1:length(sessions)
+        session_dir = sessions{ss};
+        for hh = 1:length(hemis)
+            hemi = hemis{hh};
+            vdir = fullfile(session_dir,'pRFs',template,func,cond,fitType);
+            if strcmp(template,'fine')
+                tdir = fullfile(session_dir,'pRFs',[template '_model_templates'],fitType);
+                [~,~,sorted_templates] = find_best_template(template,vdir,hemi,[],[],[],fitType);
+                dotinds = strfind(sorted_templates{1},'.');
+                % load the 'best' pol template
+                pol = load_nifti(fullfile(tdir,...
+                    [hemi '.pol.' sorted_templates{1}(dotinds(1)+1:dotinds(5)-1) '.nii.gz']));
+                if strcmp(hemi,'rh')
+                    upper = pol.vol>=0;
+                    lower = pol.vol<0;
+                    pol.vol(upper) = (-pol.vol(upper) + pi);
+                    pol.vol(lower) = (-pol.vol(lower) - pi);
+                end
+                % load the 'best' ecc template
+                ecc = load_nifti(fullfile(tdir,...
+                    [hemi '.ecc.' sorted_templates{1}(dotinds(1)+1:dotinds(5)-1) '.nii.gz']));
+                % load the 'best' areas template
+                areas = load_nifti(fullfile(tdir,...
+                    [hemi '.areas.' sorted_templates{1}(dotinds(1)+1:dotinds(5)-1) '.nii.gz']));
+                % pull out vals
+                allVals{tt,ss,hh,1} = squeeze(pol.vol(:));
+                allVals{tt,ss,hh,2} = squeeze(ecc.vol(:));
+                allVals{tt,ss,hh,3} = squeeze(areas.vol(:));
+            elseif strcmp(template,'coarse')
+                tdir = fullfile(session_dir,'pRFs',[template '_model_templates']);
+                [~,~,sorted_templates] = find_best_template(template,vdir,hemi,[],[],[],fitType);
+                dotinds = strfind(sorted_templates{1},'.');
+                % load the 'best' pol template
+                pol = load_nifti(fullfile(tdir,...
+                    [hemi '.pol.' sorted_templates{1}(dotinds(1)+1:dotinds(5)-1) '.nii.gz']));
+                if strcmp(hemi,'rh')
+                    upper = pol.vol>=0;
+                    lower = pol.vol<0;
+                    pol.vol(upper) = (-pol.vol(upper) + pi);
+                    pol.vol(lower) = (-pol.vol(lower) - pi);
+                end
+                % load the 'best' ecc template
+                ecc = load_nifti(fullfile(tdir,...
+                    [hemi '.ecc.' sorted_templates{1}(dotinds(1)+1:dotinds(5)-1) '.nii.gz']));
+                % load the 'best' ecc template
+                areas = load_nifti(fullfile(tdir,...
+                    [hemi '.areas.' sorted_templates{1}(dotinds(1)+1:dotinds(5)-1) '.nii.gz']));
+                % pull out vals
+                allVals{tt,ss,hh,1} = squeeze(pol.vol(:));
+                allVals{tt,ss,hh,2} = squeeze(ecc.vol(:));
+                allVals{tt,ss,hh,3} = squeeze(areas.vol(:));
+            elseif strcmp(template,'anat_undeformed')
+                tdir = fullfile(session_dir,'pRFs','coarse_model_templates');
+                % load the 'best' pol template
+                pol = load_nifti(fullfile(tdir,...
+                    [hemi '.pol.2.4.4.4.nii.gz']));
+                if strcmp(hemi,'rh')
+                    upper = pol.vol>=0;
+                    lower = pol.vol<0;
+                    pol.vol(upper) = (-pol.vol(upper) + pi);
+                    pol.vol(lower) = (-pol.vol(lower) - pi);
+                end
+                % load the 'best' ecc template
+                ecc = load_nifti(fullfile(tdir,...
+                    [hemi '.ecc.2.4.4.4.nii.gz']));
+                % load the 'best' ecc template
+                areas = load_nifti(fullfile(tdir,...
+                    [hemi '.areas.2.4.4.4.nii.gz']));
+                % pull out vals
+                allVals{tt,ss,hh,1} = squeeze(pol.vol(:));
+                allVals{tt,ss,hh,2} = squeeze(ecc.vol(:));
+                allVals{tt,ss,hh,3} = squeeze(areas.vol(:));
+            elseif strcmp(template,'pRF') || strcmp(template,'anat')
+                tdir = fullfile(session_dir,'pRFs',[template '_templates']);
+                % load the 'best' pol template
+                pol = load_nifti(fullfile(tdir,[hemi '.pol.' template '.nii.gz']));
+                % load the 'best' ecc template
+                ecc = load_nifti(fullfile(tdir,[hemi '.ecc.' template '.nii.gz']));
+                % load the 'best' ecc template
+                areas = load_nifti(fullfile(tdir,[hemi '.areas.' template '.nii.gz']));
+                % pull out vals
+                allVals{tt,ss,hh,1} = squeeze(pol.vol(:));
+                allVals{tt,ss,hh,2} = squeeze(ecc.vol(:));
+                allVals{tt,ss,hh,3} = squeeze(areas.vol(:));
+            elseif strcmp(template,'raw')
+                tdir = fullfile(session_dir,'pRFs');
+                % load the 'best' pol template
+                pol = load_nifti(fullfile(tdir,[hemi '.cortex.avg.copol.prfs.nii.gz']));
+                % load the 'best' ecc template
+                ecc = load_nifti(fullfile(tdir,[hemi '.cortex.avg.coecc.prfs.nii.gz']));
+                % load the 'best' co template
+                co = load_nifti(fullfile(tdir,[hemi '.cortex.avg.co.prfs.nii.gz']));
+                % pull out vals
+                allVals{tt,ss,hh,1} = squeeze(pol.vol(:));
+                allVals{tt,ss,hh,2} = squeeze(ecc.vol(:));
+                allVals{tt,ss,hh,3} = squeeze(co.vol(:));
+            end
+        end
+    end
+end
+%% Set the threshold for comparison
+for ss = 1:length(sessions)
+    for hh = 1:length(hemis)
+        % raw
+        rawpol = allVals{end,ss,hh,1};
+        rawecc = allVals{end,ss,hh,2};
+        rawco = allVals{end,ss,hh,3};
+        rawThresh = rawco>(threshs{ss}(hh));
+        
+        
+        %rawThresh = rawco>0.1;
+        
+        % loop to find nans
+        goodind = ones(size(rawThresh));
+        for tt = 1:length(templates)-2
+            goodind(abs(allVals{tt,ss,hh,3})>3) = 0; % outside V1-V3
+            goodind(isnan(allVals{tt,ss,hh,1})) = 0; % nan value
+            goodind(allVals{tt,ss,hh,2}<1.25) = 0; % ecc thresh
+            %goodind(allVals{tt,ss,hh,2}>8.75) = 0; % ecc thresh
+            goodind(allVals{tt,ss,hh,2}>5) = 0; % ecc thresh
+            %             goodind(allVals{tt,ss,hh,2}<1) = 0; % ecc thresh
+            %             goodind(allVals{tt,ss,hh,2}>30) = 0; % ecc thresh
+        end
+        goodind(isnan(allVals{end,ss,hh,1})) = 0; % nan value
+        ThreshInds{ss,hh} = zeros(size(goodind));
+        ThreshInds{ss,hh}(goodind & rawThresh) = 1;
     end
 end
 
-goodind = ones(size(allVals(1,1,hh,1)));
-% loop to find nans
+
+%% Fine/Anat - Obtain the nanmedian difference between the templates
+for ss = 1:length(sessions)
+    for hh = 1:length(hemis)
+        for tt = 1:length(templates)-1
+            % raw
+            rawpol = allVals{end,ss,hh,1};
+            rawecc = allVals{end,ss,hh,2};
+            % Loop through templates
+            tmppol = abs(circ_dist(rawpol,allVals{tt,ss,hh,1}));
+            tmpecc = abs(diff([rawecc,allVals{tt,ss,hh,2}]'));
+            tmppol(~ThreshInds{ss,hh}) = nan;
+            tmpecc(~ThreshInds{ss,hh}) = nan;
+            PolDiff(ss,hh,tt) = nanmedian(tmppol);
+            EccDiff(ss,hh,tt) = nanmedian(tmpecc);
+        end
+    end
+end
+%% Fine/Anat - Obtain the mean error values across subjects/hemis
 for tt = 1:length(templates)-1
-    goodind(abs(allVals{tt,ss,hh,3})>3) = 0; % outside V1-V3
-    goodind(isnan(allVals{tt,ss,hh,1})) = 0; % nan value
-    goodind(allVals{tt,ss,hh,2}<1.25) = 0; % ecc thresh
-    goodind(allVals{tt,ss,hh,2}>8.75) = 0; % ecc thresh
-end
-goodind = logical(goodind);
-ThreshInds{ss,hh} = zeros(size(goodind));
-%ThreshInds{ss,hh}(goodind & allVals{end,ss,hh,3}>0.2236) = 1;
-
-ThreshInds{ss,hh}(goodind) = 1;
-
-for tt = 1:length(templates)
-    % raw
-    % Loop through templates
-    tmppol = abs(circ_dist(allVals{4,ss,hh,1},allVals{tt,ss,hh,1}));
-    tmpecc = abs(diff([allVals{4,ss,hh,2},allVals{tt,ss,hh,2}]'));
-    tmppol(~ThreshInds{ss,hh}) = nan;
-    tmpecc(~ThreshInds{ss,hh}) = nan;
-    PolDiff(ss,hh,tt) = nanmedian(tmppol);
-    EccDiff(ss,hh,tt) = nanmedian(tmpecc);
-end
-for tt = 1:length(templates)
     tmppol = PolDiff(:,:,tt);
     tmpecc = EccDiff(:,:,tt);
     PolDiffmean(tt) = rad2deg(circ_mean(tmppol(:)));
-    PolDiffSEM(tt) = rad2deg(circ_std(tmppol(:)) / 1);
+    PolDiffSD(tt) = rad2deg(circ_std(tmppol(:)));% / sqrt(length(subjects)*length(hemis)));
     EccDiffmean(tt) = mean(tmpecc(:));
-    EccDiffSEM(tt) = std(tmpecc(:)) / 1;
+    EccDiffSD(tt) = std(tmpecc(:));% / sqrt(length(subjects)*length(hemis));
 end
-templates
-PolDiffmean
+%%
+disp('PolDiffmean');
+disp(PolDiffmean);
+disp('PolDiffSD');
+disp(PolDiffSD);
+disp('EccDiffmean');
+disp(EccDiffmean);
+disp('EccDiffSD');
+disp(EccDiffSD);
+%%
+
+%%% finalized code up to here %%%
 
 
 
