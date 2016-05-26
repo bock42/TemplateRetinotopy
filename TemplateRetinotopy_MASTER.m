@@ -21,13 +21,12 @@ subjects = {...
 jobNames = {'A100114K' 'A102714B' 'G101514A'};
 outNames = {'AEK' 'ASB' 'GKA'};
 pRFruns = {[1,2,5] [1,3,5] [1,3,5]};
+pRFfuncs = {'wdrf.tf' 's5.wdrf.tf'};
+srcROIs = {'cortex'};
 movieRuns = {'[3,4,6]','[2,4,6]','[2,4,6]'};
-surfFunc = 's5.wdrf.tf.surf';
-volFunc = 's5.wdrf.tf';
+volFunc = 'wdrf.tf';
 hemis = {'lh' 'rh'};
-templateType = 'coarse';
-func = 's5.wdrf.tf';
-fitType = 'V2V3';
+pRFmem = 30; % memory for cluster
 %% Run preprocessing
 for ss = 1:length(sessions)
     session_dir = sessions{ss};
@@ -83,41 +82,140 @@ for ss = 1:length(sessions)
     tDir = fullfile(session_dir,'anat_templates');
     decimate_templates(subject_name,tDir);
 end
-%% pRF analysis
-% Generates a population receptive field (pRF) estimate using data obtained
-%   while subjects viewed retinotopy stimuli (e.g. drifting bars). The
-%   resulting pRF maps are then averaged across runs.
-% If ROI = 'occipital', the averaged maps are plotted on the fsaverage_sym
-%   surface, averaged across hemispheres, and converted to a format for
-%   template fitting using Mathematica.
-hemis = {'lh' 'rh'};
-srcROI = 'cortex';
+%% Create pRF prediction variables
+% params.fieldSize         = 6.2116; % radius of stimuluated visual field in degrees visual angle
+% params.TR                = 2; % TR is seconds
+% params.peakHRF           = 3:.5:10; % time to HRF peak
+% params.nFrames           = 300; % number of images
+% params.cntrSig           = [1/4 1/4 20]; % min/lin_step/max sigma in degrees visual angle
+% params.sigBorder         = 5; % Linear scale for visual field less than 5 degrees
+% params.nLogSigs          = 6; % number of log sigmas
+% params.srndSig           = 0; % scale of surround sigma
+% params.ctrBetas          = 1; % center amplitude
+% params.srndBetas         = 0; % surround amplitude
+% params.gridScale         = 2; % scale the size of the stimulated visual field
+% createPredpRF(imFile,paramsFile,outFile,params)
 for ss = 1:length(sessions)
     session_dir = sessions{ss};
-    subject_name = subjects{ss};
-    runs = pRFruns{ss};
-    for runNum = runs
+    outDir = fullfile(session_dir,'pRF_prediction_scripts');
+    system(['rm -rf ' outDir]);
+    mkdir(outDir);
+    imFiles = cell(1,length(pRFruns{ss}));
+    paramFiles = cell(1,length(pRFruns{ss}));
+    outFiles = cell(1,length(pRFruns{ss}));
+    for i = 1:length(pRFruns{ss})
+        imFiles{i} = fullfile(session_dir,'Stimuli',['run' num2str(pRFruns{ss}(i))],'bars_images.mat');
+        paramFiles{i} = fullfile(session_dir,'Stimuli',['run' num2str(pRFruns{ss}(i))],'bars_params.mat');
+        outFiles{i} = fullfile(session_dir,'Stimuli',['run' num2str(pRFruns{ss}(i))],'pRFpred.mat');
+    end
+    create_pRF_prediction_scripts(outDir,logDir,imFiles,paramFiles,outFiles,15);
+end
+%% Create pRF analysis scripts
+for ss = 1:length(sessions)
+    session_dir = sessions{ss};
+    outDir = fullfile(session_dir,'pRF_calc_scripts');
+    system(['rm -rf ' outDir]);
+    mkdir(outDir);
+    boldDirs = find_bold(session_dir);
+    ct = 0;
+    predFiles = cell(1,length(pRFruns{ss})*length(hemis)*length(pRFfuncs));
+    outFiles = cell(1,length(pRFruns{ss})*length(hemis)*length(pRFfuncs));
+    inFiles = cell(1,length(pRFruns{ss})*length(hemis)*length(pRFfuncs));
+    srcInds = cell(1,length(pRFruns{ss})*length(hemis)*length(pRFfuncs));
+    for i = 1:length(pRFruns{ss})
         for hh = 1:length(hemis)
-            hemi = hemis{hh};
-            run_pRF(session_dir,subject_name,runNum,hemi,srcROI,surfFunc);
+            for ff = 1:length(pRFfuncs)
+                ct = ct + 1;
+                outFiles{ct} = fullfile(session_dir,'Stimuli',['run' num2str(pRFruns{ss}(i))],...
+                    [hemis{hh} '.' pRFfuncs{ff} '.pRFcalc.mat']);
+                predFiles{ct} = fullfile(session_dir,'Stimuli',...
+                    ['run' num2str(pRFruns{ss}(i))],'pRFpred.mat');
+                inFiles{ct} = fullfile(session_dir,boldDirs{pRFruns{ss}(i)},...
+                    [pRFfuncs{ff} '.surf.' hemis{hh} '.nii.gz']);
+                tmp = load_nifti(inFiles{ct});
+                srcInds{ct} = ['1:' num2str(size(tmp.vol,1))];
+            end
+        end
+    end
+    create_pRF_calc_scripts(outDir,logDir,outFiles,predFiles,inFiles,srcInds,pRFmem);
+end
+%% Make split-halves volumes
+for ss = 1:length(sessions)
+    session_dir = sessions{ss};
+    boldDirs = find_bold(session_dir);
+    for i = 1:length(pRFruns{ss})
+        for hh = 1:length(hemis)
+            for ff = 1:length(pRFfuncs)
+                inFile = fullfile(session_dir,boldDirs{pRFruns{ss}(i)},...
+                    [pRFfuncs{ff} '.surf.' hemis{hh} '.nii.gz']);
+                outFile1 = fullfile(session_dir,boldDirs{pRFruns{ss}(i)},...
+                    [pRFfuncs{ff} '.surf.' hemis{hh} '.split1.nii.gz']);
+                outFile2 = fullfile(session_dir,boldDirs{pRFruns{ss}(i)},...
+                    [pRFfuncs{ff} '.surf.' hemis{hh} '.split2.nii.gz']);
+                tmp = load_nifti(inFile);
+                out1 = tmp;
+                out2 = tmp;
+                out1.vol = out1.vol(:,:,:,1:150);
+                out2.vol = out2.vol(:,:,:,151:300);
+                save_nifti(out1,outFile1);
+                save_nifti(out2,outFile2);
+            end
         end
     end
 end
+%% Create pRF split-halves analysis scripts
+for ss = 1:length(sessions)
+    session_dir = sessions{ss};
+    outDir = fullfile(session_dir,'pRF_split_calc_scripts');
+    system(['rm -rf ' outDir]);
+    mkdir(outDir);
+    boldDirs = find_bold(session_dir);
+    ct = 0;
+    predFiles = cell(1,2*length(pRFruns{ss})*length(hemis)*length(pRFfuncs));
+    outFiles = cell(1,2*length(pRFruns{ss})*length(hemis)*length(pRFfuncs));
+    inFiles = cell(1,2*length(pRFruns{ss})*length(hemis)*length(pRFfuncs));
+    srcInds = cell(1,2*length(pRFruns{ss})*length(hemis)*length(pRFfuncs));
+    for i = 1:length(pRFruns{ss})
+        for hh = 1:length(hemis)
+            for ff = 1:length(pRFfuncs)
+                for j = 1:2
+                    ct = ct + 1;
+                    outFiles{ct} = fullfile(session_dir,'Stimuli',['run' num2str(pRFruns{ss}(i))],...
+                        [hemis{hh} '.' pRFfuncs{ff} '.split' num2str(j) '.pRFcalc.mat']);
+                    predFiles{ct} = fullfile(session_dir,'Stimuli',...
+                        ['run' num2str(pRFruns{ss}(i))],'pRFpred.mat');
+                    inFiles{ct} = fullfile(session_dir,boldDirs{pRFruns{ss}(i)},...
+                        [pRFfuncs{ff} '.surf.' hemis{hh} '.split' num2str(j) '.nii.gz']);
+                    tmp = load_nifti(inFiles{ct});
+                    srcInds{ct} = ['1:' num2str(size(tmp.vol,1))];
+                end
+            end
+        end
+    end
+    create_pRF_calc_scripts(outDir,logDir,outFiles,predFiles,inFiles,srcInds,pRFmem);
+end
 %% Average pRF
 srcROI = 'cortex';
-for ss = 1:length(sessions)
-    session_dir = sessions{ss};
-    subject_name = subjects{ss};
-    runs = pRFruns{ss};
-    average_pRF(session_dir,subject_name,runs,srcROI);
+for ff = 1:length(pRFfuncs);
+    for ss = 1:length(sessions)
+        session_dir = sessions{ss};
+        subject_name = subjects{ss};
+        runs = pRFruns{ss};
+        average_pRF(session_dir,subject_name,runs,srcROI,pRFfuncs{ff});
+    end
 end
 %% Prepare pRF template for fitting in Mathematica
-for ss = 1:length(sessions)
-    session_dir = sessions{ss};
-    subject_name = subjects{ss};
-    outName = outNames{ss};
-    prepare_pRF_Mathematica(session_dir,subject_name,outName);
+for ff = 1:length(pRFfuncs);
+    for ss = 1:length(sessions)
+        session_dir = sessions{ss};
+        subject_name = subjects{ss};
+        outName = outNames{ss};
+        prepare_pRF_Mathematica(session_dir,subject_name,outName,pRFfuncs{ff});
+    end
 end
+%% Run Mathematica template fitting
+%
+%
 %% Create pRF templates following Mathematica template fitting
 for ss = 1:length(sessions)
     session_dir = sessions{ss};
@@ -138,7 +236,8 @@ system(['cp ~/data/2014-10-29.areas-template.nii.gz ' ...
 %       cd $SUBJECTS_DIR/<subject_name>/surf
 %       mris_decimate -d 0.1 ./lh.inflated ./lh.0.1.inflated
 %       mris_decimate -d 0.1 ./rh.inflated ./rh.0.1.inflated
-convert_Mathematica_templates(templateDir);
+template_dir = fullfile(templateDir,'pRFs','coarse_model_templates');
+convert_Mathematica_templates(templateDir,template_dir);
 %% Project templates to subject space
 % This will create scripts to project the templates from the fsaverag_sym
 % surface to the individual subject surfaces
@@ -184,7 +283,7 @@ end
 %   sh /data/jet/abock/data/Retinotopy_Templates/AEK/10012014/project_templates_scripts/A100114K.sh
 
 %% Decimate the templates
-for ss = 1:2%length(sessions)
+for ss = 1:length(sessions)
     session_dir = sessions{ss};
     subject_name = subjects{ss};
     tDir = fullfile(session_dir,'pRFs','coarse_model_templates');
@@ -199,7 +298,6 @@ end
 %% Create cluster shell scripts (pRF,anat,coarse)
 tTypes = {'anat' 'pRF' 'coarse'};
 for tt = 1:length(tTypes)
-    templateType = tTypes{tt};
     tcPart = 'full';
     leaveOut = '0';
     V2V3 = '1'; % '0' = V1-V2, V1-V3; '1' = V1-V2, V1-V3, V2-V3
@@ -210,14 +308,14 @@ for tt = 1:length(tTypes)
     end
     for ss = 1:length(sessions)
         session_dir = sessions{ss};
-        outDir = fullfile(session_dir,'fit_template_scripts',templateType);
+        outDir = fullfile(session_dir,'fit_template_scripts',tTypes{tt},volFunc);
         system(['rm -rf ' outDir]);
         mkdir(outDir);
-        saveDir = fullfile(session_dir,'pRFs',templateType,volFunc,'Movie',fitType);
+        saveDir = fullfile(session_dir,'pRFs',tTypes{tt},volFunc,'Movie',fitType);
         system(['rm -rf ' saveDir]);
         mkdir(saveDir);
         runs = movieRuns{ss};
-        create_regress_template_scripts(session_dir,templateType,outDir,runs,...
+        create_regress_template_scripts(session_dir,tTypes{tt},outDir,runs,...
             volFunc,saveDir,tcPart,leaveOut,V2V3,logDir);
     end
 end
@@ -237,7 +335,7 @@ for ss = 1:length(script_dirs)
             hemi = hemis{hh};
             system(['rm ' fullfile(logDir,'*')]);
             pause(5);
-            scriptDir = fullfile(script_dir,cDirs{i});
+            scriptDir = fullfile(script_dir,cDirs{i},volFunc);
             cd(scriptDir);
             inScript=['submit_' hemi '_regress.sh'];
             system(['sh ' fullfile(scriptDir,inScript)]);
@@ -493,252 +591,113 @@ disp('EccDiffSD');
 disp(EccDiffSD);
 %%
 
-%%% finalized code up to here %%%
-
-
-
-%% Deprecated
 
 
 
 
 
-
-
-
-
-
-%% Prepare for Mathematica
-prepare_pRF_Mathematica(session_dir,subject_name)
-
-%% Run template fitting in Mathematica
-% In a notebook in Mathematica, run the template fitting developed by Noah
-%   Benson.
-%% Create the pRF template .nii.gz files, using the output .mgz from Mathematica (above)
-% Takes the .mgz output from Mathematica, convertes to nii.gz and separates
-%   out the pol, ecc, and areas maps into individual volumes.
-sessions = {...
-    '/data/jet/abock/data/Template_Retinotopy/AEK/10012014/' ...
-    '/data/jet/abock/data/Template_Retinotopy/ASB/10272014/' ...
-    '/data/jet/abock/data/Template_Retinotopy/GKA/10152014/' ...
-    };
-subjects = {...
-    'AEK_09242014_MPRAGE_ACPC_7T' ...
-    'ASB_10272014_MPRAGE_ACPC_7T' ...
-    'GKA_10152014_MPRAGE_ACPC_7T' ...
-    };
+%%
+%% pRF analysis
+% Generates a population receptive field (pRF) estimate using data obtained
+%   while subjects viewed retinotopy stimuli (e.g. drifting bars). The
+%   resulting pRF maps are then averaged across runs.
+% If ROI = 'occipital', the averaged maps are plotted on the fsaverage_sym
+%   surface, averaged across hemispheres, and converted to a format for
+%   template fitting using Mathematica.
+srcROI = 'cortex';
+partFunc = 'wdrf.tf.surf';
 for ss = 1:length(sessions)
     session_dir = sessions{ss};
     subject_name = subjects{ss};
-    create_pRF_template(session_dir,subject_name);
-    tDir = fullfile(session_dir,'pRFs','pRF_templates');
-    decimate_templates(session_dir,subject_name,tDir);
-end
-%% If doing correlation template fitting
-%
-%   see below
-%
-%%%
-%% Create cluster shell scripts (pRF)
-templateType = 'pRF';
-sessions = {...
-    '/data/jet/abock/data/Template_Retinotopy/AEK/10012014/' ...
-    '/data/jet/abock/data/Template_Retinotopy/ASB/10272014/' ...
-    '/data/jet/abock/data/Template_Retinotopy/GKA/10152014/' ...
-    };
-outDirs = {...
-    ['/data/jet/abock/cluster_shell_scripts/fit_templates/AEK/10012014/' templateType] ...
-    ['/data/jet/abock/cluster_shell_scripts/fit_templates/ASB/10272014/' templateType] ...
-    ['/data/jet/abock/cluster_shell_scripts/fit_templates/GKA/10152014/' templateType] ...
-    };
-allRuns = {'[3,4,6]','[2,4,6]','[2,4,6]'};
-func = 's5.dbrf.tf';
-tcPart = 'full';
-leaveOut = '0';
-V2V3 = [0 1];
-for ss = 1:length(sessions)
-    session_dir = sessions{ss};
-    for i = 1:length(V2V3)
-        if V2V3(i)
-            outDir = fullfile(outDirs{ss},'V2V3'); % V1-V2, V1-V3, AND V2-V3
-            saveDir = fullfile(session_dir,'pRFs',templateType,func,'Movie','V2V3');
-        else
-            outDir = fullfile(outDirs{ss},'V1'); % V1-V2, V1-V3
-            saveDir = fullfile(session_dir,'pRFs',templateType,func,'Movie','V1');
+    runs = pRFruns{ss};
+    for runNum = runs
+        for hh = 1:length(hemis)
+            hemi = hemis{hh};
+            run_pRF(session_dir,subject_name,runNum,hemi,srcROI,partFunc);
         end
-        runs = allRuns{ss};
-        create_regress_template_scripts(session_dir,templateType,outDir,runs,func,saveDir,tcPart,leaveOut,num2str(V2V3(i)));
     end
 end
-%% Create cluster shell scripts (anat)
-templateType = 'anat';
-sessions = {...
-    '/data/jet/abock/data/Template_Retinotopy/AEK/10012014/' ...
-    '/data/jet/abock/data/Template_Retinotopy/ASB/10272014/' ...
-    '/data/jet/abock/data/Template_Retinotopy/GKA/10152014/' ...
-    };
-outDirs = {...
-    ['/data/jet/abock/cluster_shell_scripts/fit_templates/AEK/10012014/' templateType] ...
-    ['/data/jet/abock/cluster_shell_scripts/fit_templates/ASB/10272014/' templateType] ...
-    ['/data/jet/abock/cluster_shell_scripts/fit_templates/GKA/10152014/' templateType] ...
-    };
-allRuns = {'[3,4,6]','[2,4,6]','[2,4,6]'};
-func = 's5.dbrf.tf';
-tcPart = 'full';
-leaveOut = '0';
-V2V3 = [0 1];
-for ss = 1:length(sessions)
-    session_dir = sessions{ss};
-    for i = 1:length(V2V3)
-        if V2V3(i)
-            outDir = fullfile(outDirs{ss},'V2V3'); % V1-V2, V1-V3, AND V2-V3
-            saveDir = fullfile(session_dir,'pRFs',templateType,func,'Movie','V2V3');
-        else
-            outDir = fullfile(outDirs{ss},'V1'); % V1-V2, V1-V3
-            saveDir = fullfile(session_dir,'pRFs',templateType,func,'Movie','V1');
-        end
-        runs = allRuns{ss};
-        create_regress_template_scripts(session_dir,templateType,outDir,runs,func,saveDir,tcPart,leaveOut,num2str(V2V3(i)));
-    end
-end
-%% Convert coarse_model_templates
-%Takes the .mgz output from Mathematica, convertes to nii.gz and separates
-%   out the pol, ecc, and areas maps into individual volumes.
-%   note: this can also be run on the cluster
-convert_Mathematica_templates(session_dir);
-
-%% Decimate surfaces
-% This has to be done in terminal IN LINUX!
-%   cd $SUBJECTS_DIR/<subject_name>/surf
-%   mris_decimate -d 0.1 ./lh.inflated ./lh.0.1.inflated
-%   mris_decimate -d 0.1 ./rh.inflated ./rh.0.1.inflated
-
-%% Decimate the pRF templates and bold runs
-%   This can also be run on the cluster
-tDir = fullfile(session_dir,'pRFs','coarse_model_templates');
-decimate_templates(session_dir,subject_name,tDir);
-decimate_bold(session_dir,subject_name,func);
-
-%% Create cluster shell scripts (coarse)
+%% Create the regress template scripts, for 1st and 2nd Halves
 templateType = 'coarse';
-sessions = {...
-    '/data/jet/abock/data/Template_Retinotopy/AEK/10012014/' ...
-    '/data/jet/abock/data/Template_Retinotopy/ASB/10272014/' ...
-    '/data/jet/abock/data/Template_Retinotopy/GKA/10152014/' ...
-    };
-outDirs = {...
-    ['/data/jet/abock/cluster_shell_scripts/fit_templates/AEK/10012014/' templateType] ...
-    ['/data/jet/abock/cluster_shell_scripts/fit_templates/ASB/10272014/' templateType] ...
-    ['/data/jet/abock/cluster_shell_scripts/fit_templates/GKA/10152014/' templateType] ...
-    };
-allRuns = {'[3,4,6]','[2,4,6]','[2,4,6]'};
+tcPart = 'half';
 func = 's5.dbrf.tf';
-tcPart = 'full';
-leaveOut = '0';
-V2V3 = [0 1];
+V2V3 = '0';
 for ss = 1:length(sessions)
-    session_dir = sessions{ss};
-    for i = 1:length(V2V3)
-        if V2V3(i)
-            outDir = fullfile(outDirs{ss},'V2V3'); % V1-V2, V1-V3, AND V2-V3
-            saveDir = fullfile(session_dir,'pRFs',templateType,func,'Movie','V2V3');
+    script_dir = fullfile(sessions{ss},'pRF_partition_scripts');
+    runs = movieRuns{ss};
+    for i = 0:5
+        tmp = combnk(1:6,i);
+        if isempty(tmp)
+            leaveOut = 0;
+            leaveOutName = '';
+            outDir = fullfile(script_dir,[templateType '_' tcPart '_leaveOut' leaveOutName]);
+            saveDir = fullfile(sessions{ss},'pRFs',templateType,func,...
+                ['Movie_' tcPart '_leaveOut' leaveOutName]);
+            create_regress_template_scripts(sessions{ss},templateType,outDir,runs,...
+                func,saveDir,tcPart,['[' num2str(leaveOut) ']'],V2V3);
         else
-            outDir = fullfile(outDirs{ss},'V1'); % V1-V2, V1-V3
-            saveDir = fullfile(session_dir,'pRFs',templateType,func,'Movie','V1');
+            for j = 1:size(tmp,1)
+                leaveOut = tmp(j,:);
+                leaveOutName = strrep(num2str(leaveOut),' ','');
+                outDir = fullfile(script_dir,[templateType '_' tcPart '_leaveOut' leaveOutName]);
+                saveDir = fullfile(sessions{ss},'pRFs',templateType,func,...
+                    ['Movie_' tcPart '_leaveOut' leaveOutName]);
+                create_regress_template_scripts(sessions{ss},templateType,outDir,runs,...
+                    func,saveDir,tcPart,['[' num2str(leaveOut) ']'],V2V3);
+            end
         end
-        runs = allRuns{ss};
-        create_regress_template_scripts(session_dir,templateType,outDir,runs,func,saveDir,tcPart,leaveOut,num2str(V2V3(i)));
     end
 end
-%% Run 'coarse' template fits on the cluster ('regress_template')
-% i.e. run the shell scripts created above
-
-%% Find the best template
-sessions = {...
-    '/data/jet/abock/data/Template_Retinotopy/AEK/10012014/' ...
-    '/data/jet/abock/data/Template_Retinotopy/ASB/10272014/' ...
-    '/data/jet/abock/data/Template_Retinotopy/GKA/10152014/' ...
+%% Submit the 5-min partition regress jobs
+script_dirs = {...
+    '/data/jet/abock/data/Retinotopy_Templates/AEK/10012014/fit_template_scripts/' ...
+    '/data/jet/abock/data/Retinotopy_Templates/ASB/10272014/fit_template_scripts/' ...
+    '/data/jet/abock/data/Retinotopy_Templates/GKA/10152014/fit_template_scripts/' ...
     };
+logDir = '/data/jet/abock/LOGS';
 hemis = {'lh' 'rh'};
-templateType = 'coarse';
-func = 's5.dbrf.tf';
-fitType = 'V2V3'; % 'V1 = V1<->V2, V1<->V3; 'V2V3' =  V1<->V2, V1<->V3, AND V2<->V3
-for ss = 1:length(sessions)
-    session_dir = sessions{ss};
-    disp(session_dir);
-    for hh = 1:length(hemis)
-        hemi = hemis{hh};
-        disp(hemi);
-        tDir = fullfile(session_dir,'pRFs',templateType,func,'Movie',fitType);
-        [varexp,params,sorted_templates] = find_best_template(templateType,tDir,hemi,[],[],[],fitType);
-        disp(params(1));
-    end
-end
-%% Create fine templates, centered on the best template (above)
-% In a notebook in Mathematica, create the fine templates
-
-%% Convert fine_model_templates
-%Takes the .mgz output from Mathematica, convertes to nii.gz and separates
-%   out the pol, ecc, and areas maps into individual volumes.
-% note: this can also be run on the cluster
-sessions = {...
-    '/data/jet/abock/data/Template_Retinotopy/AEK/10012014/' ...
-    '/data/jet/abock/data/Template_Retinotopy/ASB/10272014/' ...
-    '/data/jet/abock/data/Template_Retinotopy/GKA/10152014/' ...
-    };
-subjects = {...
-    'AEK_09242014_MPRAGE_ACPC_7T' ...
-    'ASB_10272014_MPRAGE_ACPC_7T' ...
-    'GKA_10152014_MPRAGE_ACPC_7T' ...
-    };
-V2V3 = [0 1];
-for ss = 1:length(sessions)
-    session_dir = sessions{ss};
-    subject_name = subjects{ss};
-    for i = 1:length(V2V3)
-        if V2V3(i)
-            tDir = fullfile(session_dir,'pRFs','fine_model_templates','V2V3');
-        else
-            tDir = fullfile(session_dir,'pRFs','fine_model_templates','V1');
+for ss = 1:length(script_dirs)
+    script_dir = script_dirs{ss};
+    cDirs = listdir(fullfile(script_dir,'coarse_half_leaveOut*'),'dirs');
+    for i = 1:length(cDirs);
+        for hh = 1:length(hemis)
+            hemi = hemis{hh};
+            system(['rm ' fullfile(logDir,'*')]);
+            pause(5);
+            scriptDir = fullfile(script_dir,cDirs{i});
+            cd(scriptDir);
+            inScript=['submit_' hemi '_regress.sh'];
+            system(['sh ' fullfile(scriptDir,inScript)]);
+            disp(['running ' fullfile(scriptDir,inScript)]);
+            pause(5);
+            system(['qstat > ' fullfile(logDir,'tmp.txt')]);
+            pause(5);
+            fid = fopen(fullfile(logDir,'tmp.txt'));
+            tmp = fread(fid);
+            fclose(fid);
+            while ~isempty(tmp)
+                system(['qstat > ' fullfile(logDir,'tmp.txt')]);
+                pause(5);
+                fid = fopen(fullfile(logDir,'tmp.txt'));
+                tmp = fread(fid);
+                fclose(fid);
+            end
+            fclose('all');
+            rerun_regress(inScript,scriptDir,logDir);
+            pause(5);
+            system(['qstat > ' fullfile(logDir,'tmp.txt')]);
+            pause(5);
+            fid = fopen(fullfile(logDir,'tmp.txt'));
+            tmp = fread(fid);
+            fclose(fid);
+            while ~isempty(tmp)
+                system(['qstat > ' fullfile(logDir,'tmp.txt')]);
+                pause(5);
+                fid = fopen(fullfile(logDir,'tmp.txt'));
+                tmp = fread(fid);
+                fclose(fid);
+            end
+            fclose('all');
         end
-        convert_Mathematica_fine_templates(session_dir,tDir);
-        decimate_templates(session_dir,subject_name,tDir);
     end
 end
-%% Create cluster shell scripts (fine)
-templateType = 'fine';
-sessions = {...
-    '/data/jet/abock/data/Template_Retinotopy/AEK/10012014/' ...
-    '/data/jet/abock/data/Template_Retinotopy/ASB/10272014/' ...
-    '/data/jet/abock/data/Template_Retinotopy/GKA/10152014/' ...
-    };
-outDirs = {...
-    ['/data/jet/abock/cluster_shell_scripts/fit_templates/AEK/10012014/' templateType] ...
-    ['/data/jet/abock/cluster_shell_scripts/fit_templates/ASB/10272014/' templateType] ...
-    ['/data/jet/abock/cluster_shell_scripts/fit_templates/GKA/10152014/' templateType] ...
-    };
-allRuns = {'[3,4,6]','[2,4,6]','[2,4,6]'};
-func = 's5.dbrf.tf';
-tcPart = 'full';
-leaveOut = '0';
-V2V3 = [0 1];
-for ss = 1:length(sessions)
-    session_dir = sessions{ss};
-    for i = 1:length(V2V3)
-        if V2V3(i)
-            outDir = fullfile(outDirs{ss},'V2V3'); % V1-V2, V1-V3, AND V2-V3
-            saveDir = fullfile(session_dir,'pRFs',templateType,func,'Movie','V2V3');
-        else
-            outDir = fullfile(outDirs{ss},'V1'); % V1-V2, V1-V3
-            saveDir = fullfile(session_dir,'pRFs',templateType,func,'Movie','V1');
-        end
-        runs = allRuns{ss};
-        create_regress_template_scripts(session_dir,templateType,outDir,runs,func,saveDir,tcPart,leaveOut,num2str(V2V3(i)));
-    end
-end
-%% Run the 'fine' template fits on the cluster ('regress_template')
-% i.e. run the shell scripts created above
-
-%% Overwrite feat dir
-
-
