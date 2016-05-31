@@ -7,6 +7,7 @@
 %% Set session and subject name
 logDir = '/data/jet/abock/LOGS';
 dataDir = '/data/jet/abock/data';
+SUBJECTS_DIR = getenv('SUBJECTS_DIR');
 templateDir = fullfile(dataDir,'Retinotopy_Templates','fsaverage_sym');
 sessions = {...
     fullfile(dataDir,'Retinotopy_Templates','AEK','10012014') ...
@@ -26,7 +27,8 @@ srcROIs = {'cortex'};
 movieRuns = {'[3,4,6]','[2,4,6]','[2,4,6]'};
 volFunc = 'wdrf.tf';
 hemis = {'lh' 'rh'};
-pRFmem = 30; % memory for cluster
+pRFmem = 30; % memory for cluster     
+pRFmaps = {'co' 'coecc' 'copol' 'copeakt' 'cosig1' 'cosig2' 'cosig3' 'cosig4'};
 %% Run preprocessing
 for ss = 1:length(sessions)
     session_dir = sessions{ss};
@@ -126,8 +128,8 @@ for ss = 1:length(sessions)
         for hh = 1:length(hemis)
             for ff = 1:length(pRFfuncs)
                 ct = ct + 1;
-                outFiles{ct} = fullfile(session_dir,'Stimuli',['run' num2str(pRFruns{ss}(i))],...
-                    [hemis{hh} '.' pRFfuncs{ff} '.pRFcalc.mat']);
+                outFiles{ct} = fullfile(session_dir,'pRFs',boldDirs{pRFruns{ss}(i)},...
+                        [hemis{hh} '.' pRFfuncs{ff} '.pRFcalc.mat']);
                 predFiles{ct} = fullfile(session_dir,'Stimuli',...
                     ['run' num2str(pRFruns{ss}(i))],'pRFpred.mat');
                 inFiles{ct} = fullfile(session_dir,boldDirs{pRFruns{ss}(i)},...
@@ -180,7 +182,7 @@ for ss = 1:length(sessions)
             for ff = 1:length(pRFfuncs)
                 for j = 1:2
                     ct = ct + 1;
-                    outFiles{ct} = fullfile(session_dir,'Stimuli',['run' num2str(pRFruns{ss}(i))],...
+                    outFiles{ct} = fullfile(session_dir,'pRFs',boldDirs{pRFruns{ss}(i)},...
                         [hemis{hh} '.' pRFfuncs{ff} '.split' num2str(j) '.pRFcalc.mat']);
                     predFiles{ct} = fullfile(session_dir,'Stimuli',...
                         ['run' num2str(pRFruns{ss}(i))],'pRFpred.mat');
@@ -194,15 +196,118 @@ for ss = 1:length(sessions)
     end
     create_pRF_calc_scripts(outDir,logDir,outFiles,predFiles,inFiles,srcInds,pRFmem);
 end
+%% Save the pRFs on the cortex/volume
+srcROI = 'cortex';
+progBar = ProgressBar(length(sessions),'pRFing...');
+for ss = 1:length(sessions)
+    session_dir = sessions{ss};
+    boldDirs = find_bold(session_dir);
+    for i = 1:length(pRFruns{ss})
+        outDir = fullfile(session_dir,'pRFs',boldDirs{pRFruns{ss}(i)});
+        matFiles = listdir(fullfile(outDir,'*pRFcalc.mat'),'files');
+        for j = 1:length(matFiles)
+            matFile = fullfile(outDir,matFiles{j});
+            % Set output name
+            nameInd = strfind(matFiles{j},'.pRFcalc');
+            outName = matFiles{j}(1:nameInd-1);
+            hemi = matFiles{j}(1:2);
+            templateFile = fullfile(session_dir,'anat_templates',[hemi '.ecc.anat.nii.gz']);
+            tmp = load_nifti(templateFile);
+            srcind = 1:length(tmp.vol);
+            savepRF(matFile,outName,outDir,srcROI,srcind,templateFile);
+        end
+    end
+    progBar(ss);
+end
+
 %% Average pRF
 srcROI = 'cortex';
-for ff = 1:length(pRFfuncs);
-    for ss = 1:length(sessions)
-        session_dir = sessions{ss};
-        subject_name = subjects{ss};
-        runs = pRFruns{ss};
-        average_pRF(session_dir,subject_name,runs,srcROI,pRFfuncs{ff});
+progBar = ProgressBar(length(sessions),'Averaging pRFs...');
+for ss = 1:length(sessions)
+    session_dir = sessions{ss};
+    subject_name = subjects{ss};
+    boldDirs = find_bold(session_dir);
+    for rr = 1:length(pRFfuncs)
+        rootName = pRFfuncs{rr};
+        for hh = 1:length(hemis)
+            hemi = hemis{hh};
+            for mm = 1:length(pRFmaps)
+                pRFmap = pRFmaps{mm};
+                    for i = 1:length(pRFruns{ss})
+                        inFiles{i} = fullfile(session_dir,'pRFs',boldDirs{pRFruns{ss}(i)},...
+                            [hemi '.' rootName '.' srcROI '.' pRFmap '.prfs.nii.gz']);
+                    end
+                outName = fullfile(session_dir,'pRFs',...
+                        [hemi '.' rootName '.' srcROI '.' pRFmap '.avg.prfs.nii.gz']);
+                average_pRF(inFiles,outName,srcROI,pRFmap);
+            end
+        end
     end
+    progBar(ss);
+end
+%% Project pRF to fsaverage_sym space (all project to left hemisphere)
+srcROI = 'cortex';
+for ss = 1:length(sessions)
+    session_dir = sessions{ss};
+    subject_name = subjects{ss};
+    boldDirs = find_bold(session_dir);
+    for rr = 1:length(pRFfuncs)
+        rootName = pRFfuncs{rr};
+        for hh = 1:length(hemis)
+            hemi = hemis{hh};
+            for mm = 1:length(pRFmaps)
+                pRFmap = pRFmaps{mm};
+                sval = fullfile(session_dir,'pRFs',...
+                    [hemi '.' rootName '.' srcROI '.' pRFmap '.avg.prfs.nii.gz']);
+                tval = fullfile(session_dir,'pRFs',...
+                    [hemi '.' rootName '.' srcROI '.' pRFmap '.avg.prfs.sym.nii.gz']);
+                if strcmp(hemi,'lh')
+                    mri_surf2surf(subject_name,'fsaverage_sym',sval,tval,hemi);
+                else
+                    mri_surf2surf([subject_name '/xhemi'],'fsaverage_sym',sval,tval,'lh');
+                end
+            end
+        end
+    end
+    progBar(ss);
+end
+%% Average pRF split-halves
+srcROI = 'cortex';
+splitComb = combnk(1:6,3);
+progBar = ProgressBar(length(sessions),'Averaging pRFs...');
+for ss = 1:length(sessions)
+    session_dir = sessions{ss};
+    subject_name = subjects{ss};
+    boldDirs = find_bold(session_dir);
+    for rr = 1:length(pRFfuncs)
+        rootName = pRFfuncs{rr};
+        for hh = 1:length(hemis)
+            hemi = hemis{hh};
+            for mm = 1:length(pRFmaps)
+                pRFmap = pRFmaps{mm};
+                ct = 0;
+                clear tmpFiles
+                for i = 1:length(pRFruns{ss})
+                    theseFiles = listdir(fullfile(session_dir,'pRFs',boldDirs{pRFruns{ss}(i)},...
+                        [hemi '.' rootName '.split*.' srcROI '.' pRFmap '.prfs.nii.gz']),'files');
+                    for j = 1:length(theseFiles)
+                        ct = ct + 1;
+                        tmpFiles{ct} = fullfile(session_dir,'pRFs',boldDirs{pRFruns{ss}(i)},...
+                            theseFiles{j});
+                    end
+                end
+                for sc = 1:length(splitComb)
+                    inFiles = tmpFiles(splitComb(sc,:));
+                    outName = fullfile(session_dir,'pRFs',...
+                        [hemi '.' rootName '.' srcROI '.' pRFmap '.avg.' ...
+                        num2str(splitComb(sc,1)) num2str(splitComb(sc,2)) num2str(splitComb(sc,3)) ...
+                        '.prfs.nii.gz']);
+                    average_pRF(inFiles,outName,srcROI,pRFmap);
+                end
+            end
+        end
+    end
+    progBar(ss);
 end
 %% Prepare pRF template for fitting in Mathematica
 for ff = 1:length(pRFfuncs);
