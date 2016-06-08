@@ -328,155 +328,6 @@ for ss = 1:length(sessions)
     tDir = fullfile(session_dir,'pRFs','pRF_templates');
     decimate_templates(subject_name,tDir);
 end
-%% Compute error in split-halves
-splitComb = combnk(1:6,3);
-ct = 0;
-for ss = 1:length(sessions)
-    session_dir = sessions{ss};
-    pRFDir = fullfile(session_dir,'pRFs','pRF_templates');
-    for hh = 1:length(hemis)
-        ct = ct + 1;
-        hemi = hemis{hh};
-        Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
-        Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
-        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=1;
-        clear tmp
-        for i = 1:length(splitComb)/2
-            inEcc = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
-            inPol = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
-            tempEcc = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.coecc.avg.' num2str(splitComb(end-(i-1),:),'%1d') '.prfs.nii.gz']);
-            tempPol = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.copol.avg.' num2str(splitComb(end-(i-1),:),'%1d') '.prfs.nii.gz']);
-            [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
-            tmp(i) = nanmean(degerror);
-        end
-        splitError.mean(ct) = mean(tmp(:));
-    end
-end
-%% Compute error in 'best' coarse templates
-templateType = 'coarse';
-func = 'wdrf.tf';
-fitType = 'V2V3';
-splitComb = combnk(1:6,3);
-ct = 0;
-for ss = 1:length(sessions)
-    session_dir = sessions{ss};
-    pRFDir = fullfile(session_dir,'pRFs','pRF_templates');
-    tDir = fullfile(session_dir,'pRFs',templateType,func,'Movie',fitType);
-    modelTdir = fullfile(session_dir,'pRFs','coarse_model_templates');
-    %modelTdir = fullfile(session_dir,'pRFs','coarse_model_templates_4params_V2size');
-    for hh = 1:length(hemis)
-        ct = ct + 1;
-        hemi = hemis{hh};
-        Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
-        Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
-        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=1;
-        [varexp,params,sorted_templates] = find_best_template(templateType,tDir,hemi,[],[],[],fitType);
-        dotinds = strfind(sorted_templates{1},'.');
-        tempEcc = fullfile(modelTdir,...
-            [hemi '.ecc.' sorted_templates{1}(dotinds(1)+1:dotinds(6)-1) '.nii.gz']);
-        tempPol = fullfile(modelTdir,...
-            [hemi '.pol.' sorted_templates{1}(dotinds(1)+1:dotinds(6)-1) '.nii.gz']);
-        clear tmp
-        for i = 1:length(splitComb)
-            inEcc = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
-            inPol = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
-            [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
-            tmp(i) = nanmean(degerror);
-        end
-        coarsesplitError.mean(ct) = mean(tmp(:));
-    end
-end
-%% Compute error in anat templates (deformed)
-splitComb = combnk(1:6,3);
-ct = 0;
-for ss = 1:length(sessions)
-    session_dir = sessions{ss};
-    pRFDir = fullfile(session_dir,'pRFs','pRF_templates');
-    modelTdir = fullfile(session_dir,'pRFs','anat_templates');
-    for hh = 1:length(hemis)
-        ct = ct + 1;
-        hemi = hemis{hh};
-        Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
-        Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
-        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=1;
-        tempEcc = fullfile(modelTdir,...
-            [hemi '.ecc.anat.nii.gz']);
-        tempPol = fullfile(modelTdir,...
-            [hemi '.pol.anat.nii.gz']);
-        clear tmp
-        for i = 1:length(splitComb)
-            inEcc = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
-            inPol = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
-            [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
-            tmp(i) = nanmean(degerror);
-        end
-        anatsplitError.mean(ct) = mean(tmp(:));
-    end
-end
-%% Compute error in anat templates (non-deformed)
-splitComb = combnk(1:6,3);
-ct = 0;
-for ss = 1:length(sessions)
-    session_dir = sessions{ss};
-    pRFDir = fullfile(session_dir,'pRFs','pRF_templates');
-    modelTdir = fullfile(session_dir,'pRFs','coarse_model_templates');
-    for hh = 1:length(hemis)
-        ct = ct + 1;
-        hemi = hemis{hh};
-        Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
-        Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
-        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=1;
-        tempEcc = fullfile(modelTdir,...
-            [hemi '.ecc.3.2.3.3.3.nii.gz']);
-        tempPol = fullfile(modelTdir,...
-            [hemi '.pol.3.2.3.3.3.nii.gz']);
-        clear tmp
-        for i = 1:length(splitComb)
-            inEcc = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
-            inPol = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
-            [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
-            tmp(i) = nanmean(degerror);
-        end
-        nondanatsplitError.mean(ct) = mean(tmp(:));
-    end
-end
-%% Plot error
-dim = [.5 .75 .1 .1];
-split.mean = mean(splitError.mean);
-split.std = std(splitError.mean);
-anat.mean = mean(anatsplitError.mean);
-anat.std = std(anatsplitError.mean);
-coarse.mean = mean(coarsesplitError.mean);
-coarse.std = std(coarsesplitError.mean);
-nodanat.mean = mean(nondanatsplitError.mean);
-nodanat.std = std(nondanatsplitError.mean);
-fullFigure;bar([split.mean anat.mean coarse.mean nodanat.mean]);
-hold on;
-errorbar([split.mean anat.mean coarse.mean nodanat.mean],[split.std anat.std coarse.std nodanat.std],'.','MarkerSize',0.01);
-xlabel('Map Type','FontSize',20);
-ylabel('Mean error (degress visual angle)','FontSize',20);
-set(gca,'XTickLabel',{'split-half','anat-deformed','coarse' 'anat-non-deformed'},'FontSize',15);
-axis square
-annotation('textbox',dim,'String','error bars = SD','FontSize',15,'HorizontalAlignment','center');
-title('Error in retinotopy prediction','FontSize',20);
-%%
-
-
-
-%%
-
-
-
 %% Copy an anatomical template, to be used later
 mkdir(fullfile(templateDir,'anat_templates'));
 system(['cp ~/data/2014-10-29.areas-template.nii.gz ' ...
@@ -648,24 +499,144 @@ for ss = 1:length(sessions)
         end
     end
 end
-%%
+%% Create fine templates centered on the best templates (above)
+%   Do this in Mathematica
 
+%% Convert fsaverage_sym coarse_model_templates to nifti
+tdir = fullfile(templateDir,'pRFs','fine_model_templates');
+for ss = 1:length(sessions)
+    template_dir = fullfile(tdir,outNames{ss});
+    convert_Mathematica_fine_templates(templateDir,template_dir);
+end
 
-%% Find the best template
+%% Project fine fsaverage_sym templates to subject space
+% This will create scripts to project the templates from the fsaverag_sym
+% surface to the individual subject surfaces
 
-oldsessions = {...
-    fullfile(dataDir,'Template_Retinotopy','AEK','10012014') ...
-    fullfile(dataDir,'Template_Retinotopy','ASB','10272014') ...
-    fullfile(dataDir,'Template_Retinotopy','GKA','10152014') ...
+srcsubject = 'fsaverage_sym';
+mem = 5;
+for ss = 1:length(sessions)
+    session_dir = sessions{ss};
+    subject_name = subjects{ss};
+    submit_name = jobNames{ss};
+    tDir = fullfile(templateDir,'pRFs','fine_model_templates',outNames{ss});
+    outDir = fullfile(session_dir,'project_fine_templates_scripts');
+    system(['rm -rf ' outDir]);
+    mkdir(outDir);
+    sDir = fullfile(session_dir,'pRFs','fine_model_templates');
+    system(['rm -rf ' sDir]);
+    mkdir(sDir);
+    tFiles = listdir(fullfile(tDir,'*.nii.gz'),'files');
+    job_string = cell(1,length(tFiles));
+    for tt = 1:length(tFiles);
+        sval = fullfile(tDir,tFiles{tt});
+        hemi = tFiles{tt}(1:2);
+        job_name = tFiles{tt};
+        tval = fullfile(sDir,job_name);
+        if strcmp(hemi,'lh')
+            matlab_string = ['mri_surf2surf(''' srcsubject ''',''' subject_name ''',''' ...
+                sval ''',''' tval ''',''lh'');'];
+        else
+            matlab_string = ['mri_surf2surf(''' srcsubject ''',''' subject_name '/xhemi'',''' ...
+                sval ''',''' tval ''',''lh'');'];
+        end
+        create_job_shell(outDir,job_name,matlab_string);
+        job_string{tt} = fullfile(outDir,[job_name '.sh']);
+    end
+    create_submit_shell(outDir,logDir,submit_name,job_string,mem)
+end
+%% Decimate the fine templates
+for ss = 1:length(sessions)
+    session_dir = sessions{ss};
+    subject_name = subjects{ss};
+    tDir = fullfile(session_dir,'pRFs','fine_model_templates');
+    decimate_templates(subject_name,tDir);
+end
+%% Create cluster shell scripts (fine)
+tTypes = {'fine'};
+for tt = 1:length(tTypes)
+    tcPart = 'full';
+    leaveOut = '0';
+    V2V3 = '1'; % '0' = V1-V2, V1-V3; '1' = V1-V2, V1-V3, V2-V3
+    if strcmp(V2V3,'1')
+        fitType = 'V2V3';
+    else
+        fitType = 'V1';
+    end
+    for ss = 1:length(sessions)
+        session_dir = sessions{ss};
+        outDir = fullfile(session_dir,'fit_template_scripts',tTypes{tt},volFunc);
+        system(['rm -rf ' outDir]);
+        mkdir(outDir);
+        saveDir = fullfile(session_dir,'pRFs',tTypes{tt},volFunc,'Movie',fitType);
+        system(['rm -rf ' saveDir]);
+        mkdir(saveDir);
+        runs = movieRuns{ss};
+        create_regress_template_scripts(session_dir,tTypes{tt},outDir,runs,...
+            volFunc,saveDir,tcPart,leaveOut,V2V3,logDir);
+    end
+end
+%% Submit the regress scripts (must be run from chead on UPenn cluster)
+script_dirs = {...
+    '/data/jet/abock/data/Retinotopy_Templates/AEK/10012014/fit_template_scripts/' ...
+    '/data/jet/abock/data/Retinotopy_Templates/ASB/10272014/fit_template_scripts/' ...
+    '/data/jet/abock/data/Retinotopy_Templates/GKA/10152014/fit_template_scripts/' ...
     };
-
-
+logDir = '/data/jet/abock/LOGS';
 hemis = {'lh' 'rh'};
-templateType = 'coarse';
-func = 's5.dbrf.tf';
+for ss = 1:length(script_dirs)
+    script_dir = script_dirs{ss};
+    cDirs = listdir(script_dir,'dirs');
+    for i = 3%length(cDirs); % fine
+        for hh = 1:length(hemis)
+            hemi = hemis{hh};
+            system(['rm -rf ' logDir]);
+            pause(5);
+            mkdir(logDir);
+            scriptDir = fullfile(script_dir,cDirs{i},volFunc);
+            cd(scriptDir);
+            inScript=['submit_' hemi '_regress.sh'];
+            system(['sh ' fullfile(scriptDir,inScript)]);
+            disp(['running ' fullfile(scriptDir,inScript)]);
+            pause(5);
+            system(['qstat > ' fullfile(logDir,'tmp.txt')]);
+            pause(5);
+            fid = fopen(fullfile(logDir,'tmp.txt'));
+            tmp = fread(fid);
+            fclose(fid);
+            while ~isempty(tmp)
+                system(['qstat > ' fullfile(logDir,'tmp.txt')]);
+                pause(5);
+                fid = fopen(fullfile(logDir,'tmp.txt'));
+                tmp = fread(fid);
+                fclose(fid);
+            end
+            fclose('all');
+            rerun_regress(inScript,scriptDir,logDir);
+            pause(5);
+            system(['qstat > ' fullfile(logDir,'tmp.txt')]);
+            pause(5);
+            fid = fopen(fullfile(logDir,'tmp.txt'));
+            tmp = fread(fid);
+            fclose(fid);
+            while ~isempty(tmp)
+                system(['qstat > ' fullfile(logDir,'tmp.txt')]);
+                pause(5);
+                fid = fopen(fullfile(logDir,'tmp.txt'));
+                tmp = fread(fid);
+                fclose(fid);
+            end
+            fclose('all');
+        end
+    end
+end
+%% Find the best template
+hemis = {'lh' 'rh'};
+templateType = 'fine';
+func = 'wdrf.tf';
 fitType = 'V2V3'; % 'V1 = V1<->V2, V1<->V3; 'V2V3' =  V1<->V2, V1<->V3, AND V2<->V3
-for ss = 1:length(oldsessions)
-    session_dir = oldsessions{ss};
+for ss = 1:length(sessions)
+    session_dir = sessions{ss};
     disp(session_dir);
     for hh = 1:length(hemis)
         hemi = hemis{hh};
@@ -687,6 +658,220 @@ for ss = 1:length(oldsessions)
         end
     end
 end
+%% Compute error in split-halves
+splitComb = combnk(1:6,3);
+ct = 0;
+for ss = 1:length(sessions)
+    session_dir = sessions{ss};
+    pRFDir = fullfile(session_dir,'pRFs','pRF_templates');
+    for hh = 1:length(hemis)
+        ct = ct + 1;
+        hemi = hemis{hh};
+        Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
+        Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
+        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=1;
+        clear tmp
+        for i = 1:length(splitComb)/2
+            inEcc = fullfile(session_dir,'pRFs',...
+                [hemi '.wdrf.tf.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+            inPol = fullfile(session_dir,'pRFs',...
+                [hemi '.wdrf.tf.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+            tempEcc = fullfile(session_dir,'pRFs',...
+                [hemi '.wdrf.tf.cortex.coecc.avg.' num2str(splitComb(end-(i-1),:),'%1d') '.prfs.nii.gz']);
+            tempPol = fullfile(session_dir,'pRFs',...
+                [hemi '.wdrf.tf.cortex.copol.avg.' num2str(splitComb(end-(i-1),:),'%1d') '.prfs.nii.gz']);
+            [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
+            tmp(i) = nanmean(degerror);
+        end
+        splitError.mean(ct) = mean(tmp(:));
+    end
+end
+%% Compute error in 'best' coarse templates
+templateType = 'coarse';
+func = 'wdrf.tf';
+fitType = 'V2V3';
+splitComb = combnk(1:6,3);
+ct = 0;
+for ss = 1:length(sessions)
+    session_dir = sessions{ss};
+    pRFDir = fullfile(session_dir,'pRFs','pRF_templates');
+    tDir = fullfile(session_dir,'pRFs',templateType,func,'Movie',fitType);
+    modelTdir = fullfile(session_dir,'pRFs','coarse_model_templates');
+    %modelTdir = fullfile(session_dir,'pRFs','coarse_model_templates_4params_V2size');
+    for hh = 1:length(hemis)
+        ct = ct + 1;
+        hemi = hemis{hh};
+        Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
+        Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
+        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=1;
+        [varexp,params,sorted_templates] = find_best_template(templateType,tDir,hemi,[],[],[],fitType);
+        dotinds = strfind(sorted_templates{1},'.');
+        tempEcc = fullfile(modelTdir,...
+            [hemi '.ecc.' sorted_templates{1}(dotinds(1)+1:dotinds(6)-1) '.nii.gz']);
+        tempPol = fullfile(modelTdir,...
+            [hemi '.pol.' sorted_templates{1}(dotinds(1)+1:dotinds(6)-1) '.nii.gz']);
+        clear tmp
+        for i = 1:length(splitComb)
+            inEcc = fullfile(session_dir,'pRFs',...
+                [hemi '.wdrf.tf.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+            inPol = fullfile(session_dir,'pRFs',...
+                [hemi '.wdrf.tf.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+            [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
+            tmp(i) = nanmean(degerror);
+        end
+        coarsesplitError.mean(ct) = mean(tmp(:));
+    end
+end
+%% Compute error in 'best' fine templates
+templateType = 'fine';
+func = 'wdrf.tf';
+fitType = 'V2V3';
+splitComb = combnk(1:6,3);
+ct = 0;
+for ss = 1:length(sessions)
+    session_dir = sessions{ss};
+    pRFDir = fullfile(session_dir,'pRFs','pRF_templates');
+    tDir = fullfile(session_dir,'pRFs',templateType,func,'Movie',fitType);
+    modelTdir = fullfile(session_dir,'pRFs','fine_model_templates');
+    %modelTdir = fullfile(session_dir,'pRFs','coarse_model_templates_4params_V2size');
+    for hh = 1:length(hemis)
+        ct = ct + 1;
+        hemi = hemis{hh};
+        Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
+        Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
+        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=1;
+        [varexp,params,sorted_templates] = find_best_template(templateType,tDir,hemi,[],[],[],fitType);
+        dotinds = strfind(sorted_templates{1},'.');
+        tempEcc = fullfile(modelTdir,...
+            [hemi '.ecc.' sorted_templates{1}(dotinds(1)+1:dotinds(5)-1) '.nii.gz']);
+        tempPol = fullfile(modelTdir,...
+            [hemi '.pol.' sorted_templates{1}(dotinds(1)+1:dotinds(5)-1) '.nii.gz']);
+        clear tmp
+        for i = 1:length(splitComb)
+            inEcc = fullfile(session_dir,'pRFs',...
+                [hemi '.wdrf.tf.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+            inPol = fullfile(session_dir,'pRFs',...
+                [hemi '.wdrf.tf.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+            [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
+            tmp(i) = nanmean(degerror);
+        end
+        finesplitError.mean(ct) = mean(tmp(:));
+    end
+end
+%% Compute error in anat templates (deformed)
+splitComb = combnk(1:6,3);
+ct = 0;
+for ss = 1:length(sessions)
+    session_dir = sessions{ss};
+    pRFDir = fullfile(session_dir,'pRFs','pRF_templates');
+    modelTdir = fullfile(session_dir,'pRFs','anat_templates');
+    for hh = 1:length(hemis)
+        ct = ct + 1;
+        hemi = hemis{hh};
+        Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
+        Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
+        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=1;
+        tempEcc = fullfile(modelTdir,...
+            [hemi '.ecc.anat.nii.gz']);
+        tempPol = fullfile(modelTdir,...
+            [hemi '.pol.anat.nii.gz']);
+        clear tmp
+        for i = 1:length(splitComb)
+            inEcc = fullfile(session_dir,'pRFs',...
+                [hemi '.wdrf.tf.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+            inPol = fullfile(session_dir,'pRFs',...
+                [hemi '.wdrf.tf.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+            [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
+            tmp(i) = nanmean(degerror);
+        end
+        anatsplitError.mean(ct) = mean(tmp(:));
+    end
+end
+%% Compute error in anat templates (non-deformed)
+splitComb = combnk(1:6,3);
+ct = 0;
+for ss = 1:length(sessions)
+    session_dir = sessions{ss};
+    pRFDir = fullfile(session_dir,'pRFs','pRF_templates');
+    modelTdir = fullfile(session_dir,'pRFs','coarse_model_templates');
+    for hh = 1:length(hemis)
+        ct = ct + 1;
+        hemi = hemis{hh};
+        Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
+        Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
+        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=1;
+        tempEcc = fullfile(modelTdir,...
+            [hemi '.ecc.3.2.3.3.3.nii.gz']);
+        tempPol = fullfile(modelTdir,...
+            [hemi '.pol.3.2.3.3.3.nii.gz']);
+        clear tmp
+        for i = 1:length(splitComb)
+            inEcc = fullfile(session_dir,'pRFs',...
+                [hemi '.wdrf.tf.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+            inPol = fullfile(session_dir,'pRFs',...
+                [hemi '.wdrf.tf.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+            [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
+            tmp(i) = nanmean(degerror);
+        end
+        nondanatsplitError.mean(ct) = mean(tmp(:));
+    end
+end
+%% Plot error
+dim = [.5 .75 .1 .1];
+split.mean = mean(splitError.mean);
+split.std = std(splitError.mean);
+anat.mean = mean(anatsplitError.mean);
+anat.std = std(anatsplitError.mean);
+fine.mean = mean(finesplitError.mean);
+fine.std = std(finesplitError.mean);
+coarse.mean = mean(coarsesplitError.mean);
+coarse.std = std(coarsesplitError.mean);
+nodanat.mean = mean(nondanatsplitError.mean);
+nodanat.std = std(nondanatsplitError.mean);
+fullFigure;bar([split.mean anat.mean fine.mean coarse.mean nodanat.mean]);
+hold on;
+errorbar([split.mean anat.mean fine.mean coarse.mean nodanat.mean],...
+    [split.std anat.std fine.std coarse.std nodanat.std],'.','MarkerSize',0.01);
+xlabel('Map Type','FontSize',20);
+ylabel('Mean error (degress visual angle)','FontSize',20);
+set(gca,'XTickLabel',{'split-half','anat-deformed','fine','coarse','anat-non-deformed'},'FontSize',15);
+axis square
+annotation('textbox',dim,'String','error bars = SD','FontSize',15,'HorizontalAlignment','center');
+title('Error in retinotopy prediction','FontSize',20);
+%%
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
