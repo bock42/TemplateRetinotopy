@@ -25,7 +25,7 @@ pRFruns = {[1,2,5] [1,3,5] [1,3,5]};
 pRFfuncs = {'wdrf.tf' 's5.wdrf.tf'};
 srcROIs = {'cortex'};
 movieRuns = {'[3,4,6]','[2,4,6]','[2,4,6]'};
-volFunc = 'wdrf.tf';
+volFunc = 's5.wdrf.tf';% 'wdrf.tf';
 hemis = {'lh' 'rh'};
 pRFmem = 30; % memory for cluster
 pRFmaps = {'co' 'coecc' 'copol' 'copeakt' 'cosig1' 'cosig2' 'cosig3' 'cosig4'};
@@ -332,11 +332,11 @@ end
 mkdir(fullfile(templateDir,'anat_templates'));
 system(['cp ~/data/2014-10-29.areas-template.nii.gz ' ...
     fullfile(templateDir,'anat_templates','lh.areas.anat.nii.gz')]);
-%% Convert fsaverage_sym coarse_model_templates to nifti
+%% Convert fsaverage_sym templates to nifti (coarse)
 template_dir = fullfile(templateDir,'pRFs','coarse_model_templates');
 convert_Mathematica_templates(templateDir,template_dir);
 
-%% Project fsaverage_sym templates to subject space
+%% Project fsaverage_sym templates to subject space (coarse)
 % This will create scripts to project the templates from the fsaverag_sym
 % surface to the individual subject surfaces
 tDir = fullfile(templateDir,'pRFs','coarse_model_templates');
@@ -380,7 +380,7 @@ end
 %   for example:
 %   sh /data/jet/abock/data/Retinotopy_Templates/AEK/10012014/project_templates_scripts/A100114K.sh
 
-%% Decimate the templates
+%% Decimate the templates (coarse)
 for ss = 1:length(sessions)
     session_dir = sessions{ss};
     subject_name = subjects{ss};
@@ -395,29 +395,32 @@ for ss = 1:length(sessions)
 end
 %% Create cluster shell scripts (pRF,anat,coarse)
 tTypes = {'anat' 'pRF' 'coarse'};
-for tt = 1:length(tTypes)
-    tcPart = 'full';
-    leaveOut = '0';
-    V2V3 = '1'; % '0' = V1-V2, V1-V3; '1' = V1-V2, V1-V3, V2-V3
-    if strcmp(V2V3,'1')
-        fitType = 'V2V3';
-    else
-        fitType = 'V1';
-    end
-    for ss = 1:length(sessions)
-        session_dir = sessions{ss};
-        outDir = fullfile(session_dir,'fit_template_scripts',tTypes{tt},volFunc);
-        system(['rm -rf ' outDir]);
-        mkdir(outDir);
-        saveDir = fullfile(session_dir,'pRFs',tTypes{tt},volFunc,'Movie',fitType);
-        system(['rm -rf ' saveDir]);
-        mkdir(saveDir);
-        runs = movieRuns{ss};
-        create_regress_template_scripts(session_dir,tTypes{tt},outDir,runs,...
-            volFunc,saveDir,tcPart,leaveOut,V2V3,logDir);
+fitTypes = {'V1' 'V2V3'};
+for ff = 1:length(fitTypes)
+    fitType = fitTypes{ff};
+    for tt = 1:length(tTypes)
+        tcPart = 'full';
+        leaveOut = '0';
+        if strcmp(fitType,'V2V3')
+            V2V3 = '1'; % '0' = V1-V2, V1-V3; '1' = V1-V2, V1-V3, V2-V3
+        else
+            V2V3 = '0'; % '0' = V1-V2, V1-V3; '1' = V1-V2, V1-V3, V2-V3
+        end
+        for ss = 1:length(sessions)
+            session_dir = sessions{ss};
+            outDir = fullfile(session_dir,'fit_template_scripts',tTypes{tt},fitType,volFunc);
+            system(['rm -rf ' outDir]);
+            mkdir(outDir);
+            saveDir = fullfile(session_dir,'pRFs',tTypes{tt},volFunc,'Movie',fitType);
+            system(['rm -rf ' saveDir]);
+            mkdir(saveDir);
+            runs = movieRuns{ss};
+            create_regress_template_scripts(session_dir,tTypes{tt},outDir,runs,...
+                volFunc,saveDir,tcPart,leaveOut,V2V3,logDir);
+        end
     end
 end
-%% Submit the regress scripts (must be run from chead on UPenn cluster)
+%% Submit the regress scripts (must be run from chead on UPenn cluster) - (coarse)
 script_dirs = {...
     '/data/jet/abock/data/Retinotopy_Templates/AEK/10012014/fit_template_scripts/' ...
     '/data/jet/abock/data/Retinotopy_Templates/ASB/10272014/fit_template_scripts/' ...
@@ -425,94 +428,102 @@ script_dirs = {...
     };
 logDir = '/data/jet/abock/LOGS';
 hemis = {'lh' 'rh'};
-for ss = 1:length(script_dirs)
-    script_dir = script_dirs{ss};
-    cDirs = listdir(script_dir,'dirs');
-    for i = 1:2%length(cDirs);
-        for hh = 1:length(hemis)
-            hemi = hemis{hh};
-            system(['rm -rf ' logDir]);
-            pause(5);
-            mkdir(logDir);
-            scriptDir = fullfile(script_dir,cDirs{i},volFunc);
-            cd(scriptDir);
-            inScript=['submit_' hemi '_regress.sh'];
-            system(['sh ' fullfile(scriptDir,inScript)]);
-            disp(['running ' fullfile(scriptDir,inScript)]);
-            pause(5);
-            system(['qstat > ' fullfile(logDir,'tmp.txt')]);
-            pause(5);
-            fid = fopen(fullfile(logDir,'tmp.txt'));
-            tmp = fread(fid);
-            fclose(fid);
-            while ~isempty(tmp)
-                system(['qstat > ' fullfile(logDir,'tmp.txt')]);
-                pause(5);
-                fid = fopen(fullfile(logDir,'tmp.txt'));
-                tmp = fread(fid);
-                fclose(fid);
+fitTypes = {'V1' 'V2V3'};
+for ff = 1:length(fitTypes)
+    fitType = fitTypes{ff};
+    for ss = 1:length(script_dirs)
+        script_dir = script_dirs{ss};
+        cDirs = listdir(script_dir,'dirs');
+        for i = 1:length(cDirs);
+            if strcmp(cDirs{i},'anat') || strcmp(cDirs{i},'coarse')
+                for hh = 1:length(hemis)
+                    hemi = hemis{hh};
+                    system(['rm -rf ' logDir]);
+                    pause(5);
+                    mkdir(logDir);
+                    scriptDir = fullfile(script_dir,cDirs{i},fitType,volFunc);
+                    cd(scriptDir);
+                    inScript=['submit_' hemi '_regress.sh'];
+                    system(['sh ' fullfile(scriptDir,inScript)]);
+                    disp(['running ' fullfile(scriptDir,inScript)]);
+                    pause(5);
+                    system(['qstat > ' fullfile(logDir,'tmp.txt')]);
+                    pause(5);
+                    fid = fopen(fullfile(logDir,'tmp.txt'));
+                    tmp = fread(fid);
+                    fclose(fid);
+                    while ~isempty(tmp)
+                        system(['qstat > ' fullfile(logDir,'tmp.txt')]);
+                        pause(5);
+                        fid = fopen(fullfile(logDir,'tmp.txt'));
+                        tmp = fread(fid);
+                        fclose(fid);
+                    end
+                    fclose('all');
+                    rerun_regress(inScript,scriptDir,logDir);
+                    pause(5);
+                    system(['qstat > ' fullfile(logDir,'tmp.txt')]);
+                    pause(5);
+                    fid = fopen(fullfile(logDir,'tmp.txt'));
+                    tmp = fread(fid);
+                    fclose(fid);
+                    while ~isempty(tmp)
+                        system(['qstat > ' fullfile(logDir,'tmp.txt')]);
+                        pause(5);
+                        fid = fopen(fullfile(logDir,'tmp.txt'));
+                        tmp = fread(fid);
+                        fclose(fid);
+                    end
+                    fclose('all');
+                end
             end
-            fclose('all');
-            rerun_regress(inScript,scriptDir,logDir);
-            pause(5);
-            system(['qstat > ' fullfile(logDir,'tmp.txt')]);
-            pause(5);
-            fid = fopen(fullfile(logDir,'tmp.txt'));
-            tmp = fread(fid);
-            fclose(fid);
-            while ~isempty(tmp)
-                system(['qstat > ' fullfile(logDir,'tmp.txt')]);
-                pause(5);
-                fid = fopen(fullfile(logDir,'tmp.txt'));
-                tmp = fread(fid);
-                fclose(fid);
-            end
-            fclose('all');
         end
     end
 end
-%% Find the best template
+%% Find the best template (coarse)
 hemis = {'lh' 'rh'};
 templateType = 'coarse';
-func = 'wdrf.tf';
-fitType = 'V2V3'; % 'V1 = V1<->V2, V1<->V3; 'V2V3' =  V1<->V2, V1<->V3, AND V2<->V3
+func = 's5.wdrf.tf';
+fitTypes = {'V1' 'V2V3'};
 for ss = 1:length(sessions)
     session_dir = sessions{ss};
     disp(session_dir);
-    for hh = 1:length(hemis)
-        hemi = hemis{hh};
-        disp(hemi);
-        tDir = fullfile(session_dir,'pRFs',templateType,func,'Movie',fitType);
-        if strcmp(templateType,'anat')
-            vals = load(fullfile(tDir,[hemi '.' templateType '.varexp.txt']));
-            if strcmp(fitType,'V1')
-                varexp = nansum(vals(1:2));
-            elseif strcmp(fitType,'V2V3')
-                varexp = nansum(vals(1:3));
+    for ff = 1:length(fitTypes)
+        fitType = fitTypes{ff};
+        disp(fitType);
+        for hh = 1:length(hemis)
+            hemi = hemis{hh};
+            disp(hemi);
+            tDir = fullfile(session_dir,'pRFs',templateType,func,'Movie',fitType);
+            if strcmp(templateType,'anat')
+                vals = load(fullfile(tDir,[hemi '.' templateType '.varexp.txt']));
+                if strcmp(fitType,'V1')
+                    varexp = nansum(vals(1:2));
+                elseif strcmp(fitType,'V2V3')
+                    varexp = nansum(vals(1:3));
+                end
+                disp(varexp);
+            else
+                [varexp,params,sorted_templates] = find_best_template(templateType,tDir,hemi,[],[],[],fitType);
+                disp(params(1));
+                disp(sorted_templates(1));
+                disp(varexp(1));
             end
-            disp(varexp);
-        else
-            [varexp,params,sorted_templates] = find_best_template(templateType,tDir,hemi,[],[],[],fitType);
-            disp(params(1));
-            disp(sorted_templates(1));
-            disp(varexp(1));
         end
     end
 end
 %% Create fine templates centered on the best templates (above)
 %   Do this in Mathematica
 
-%% Convert fsaverage_sym coarse_model_templates to nifti
+%% Convert fsaverage_sym templates to nifti (fine)
 tdir = fullfile(templateDir,'pRFs','fine_model_templates');
 for ss = 1:length(sessions)
     template_dir = fullfile(tdir,outNames{ss});
     convert_Mathematica_fine_templates(templateDir,template_dir);
 end
-
-%% Project fine fsaverage_sym templates to subject space
+%% Project fine fsaverage_sym templates to subject space (fine)
 % This will create scripts to project the templates from the fsaverag_sym
 % surface to the individual subject surfaces
-
 srcsubject = 'fsaverage_sym';
 mem = 5;
 for ss = 1:length(sessions)
@@ -545,6 +556,9 @@ for ss = 1:length(sessions)
     end
     create_submit_shell(outDir,logDir,submit_name,job_string,mem)
 end
+%% Run the above scripts
+% e.g. sh
+% /data/jet/abock/data/Retinotopy_Templates/AEK/10012014/project_fine_templates_scripts/A100114K.sh
 %% Decimate the fine templates
 for ss = 1:length(sessions)
     session_dir = sessions{ss};
@@ -576,7 +590,7 @@ for tt = 1:length(tTypes)
             volFunc,saveDir,tcPart,leaveOut,V2V3,logDir);
     end
 end
-%% Submit the regress scripts (must be run from chead on UPenn cluster)
+%% Submit the regress scripts (must be run from chead on UPenn cluster) (fine)
 script_dirs = {...
     '/data/jet/abock/data/Retinotopy_Templates/AEK/10012014/fit_template_scripts/' ...
     '/data/jet/abock/data/Retinotopy_Templates/ASB/10272014/fit_template_scripts/' ...
@@ -584,56 +598,58 @@ script_dirs = {...
     };
 logDir = '/data/jet/abock/LOGS';
 hemis = {'lh' 'rh'};
-for ss = 1:length(script_dirs)
+for ss = 3%1:length(script_dirs)
     script_dir = script_dirs{ss};
     cDirs = listdir(script_dir,'dirs');
-    for i = 3%length(cDirs); % fine
-        for hh = 1:length(hemis)
-            hemi = hemis{hh};
-            system(['rm -rf ' logDir]);
-            pause(5);
-            mkdir(logDir);
-            scriptDir = fullfile(script_dir,cDirs{i},volFunc);
-            cd(scriptDir);
-            inScript=['submit_' hemi '_regress.sh'];
-            system(['sh ' fullfile(scriptDir,inScript)]);
-            disp(['running ' fullfile(scriptDir,inScript)]);
-            pause(5);
-            system(['qstat > ' fullfile(logDir,'tmp.txt')]);
-            pause(5);
-            fid = fopen(fullfile(logDir,'tmp.txt'));
-            tmp = fread(fid);
-            fclose(fid);
-            while ~isempty(tmp)
+    for i = 1:length(cDirs); % fine
+        if strcmp(cDirs{i},'fine') 
+            for hh = 1:length(hemis)
+                hemi = hemis{hh};
+                system(['rm -rf ' logDir]);
+                pause(5);
+                mkdir(logDir);
+                scriptDir = fullfile(script_dir,cDirs{i},volFunc);
+                cd(scriptDir);
+                inScript=['submit_' hemi '_regress.sh'];
+                system(['sh ' fullfile(scriptDir,inScript)]);
+                disp(['running ' fullfile(scriptDir,inScript)]);
+                pause(5);
                 system(['qstat > ' fullfile(logDir,'tmp.txt')]);
                 pause(5);
                 fid = fopen(fullfile(logDir,'tmp.txt'));
                 tmp = fread(fid);
                 fclose(fid);
-            end
-            fclose('all');
-            rerun_regress(inScript,scriptDir,logDir);
-            pause(5);
-            system(['qstat > ' fullfile(logDir,'tmp.txt')]);
-            pause(5);
-            fid = fopen(fullfile(logDir,'tmp.txt'));
-            tmp = fread(fid);
-            fclose(fid);
-            while ~isempty(tmp)
+                while ~isempty(tmp)
+                    system(['qstat > ' fullfile(logDir,'tmp.txt')]);
+                    pause(5);
+                    fid = fopen(fullfile(logDir,'tmp.txt'));
+                    tmp = fread(fid);
+                    fclose(fid);
+                end
+                fclose('all');
+                rerun_regress(inScript,scriptDir,logDir);
+                pause(5);
                 system(['qstat > ' fullfile(logDir,'tmp.txt')]);
                 pause(5);
                 fid = fopen(fullfile(logDir,'tmp.txt'));
                 tmp = fread(fid);
                 fclose(fid);
+                while ~isempty(tmp)
+                    system(['qstat > ' fullfile(logDir,'tmp.txt')]);
+                    pause(5);
+                    fid = fopen(fullfile(logDir,'tmp.txt'));
+                    tmp = fread(fid);
+                    fclose(fid);
+                end
+                fclose('all');
             end
-            fclose('all');
         end
     end
 end
 %% Find the best template
 hemis = {'lh' 'rh'};
 templateType = 'fine';
-func = 'wdrf.tf';
+func = 's5.wdrf.tf';
 fitType = 'V2V3'; % 'V1 = V1<->V2, V1<->V3; 'V2V3' =  V1<->V2, V1<->V3, AND V2<->V3
 for ss = 1:length(sessions)
     session_dir = sessions{ss};
@@ -659,6 +675,7 @@ for ss = 1:length(sessions)
     end
 end
 %% Compute error in split-halves
+func = 's5.wdrf.tf';
 splitComb = combnk(1:6,3);
 ct = 0;
 for ss = 1:length(sessions)
@@ -673,13 +690,13 @@ for ss = 1:length(sessions)
         clear tmp
         for i = 1:length(splitComb)/2
             inEcc = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+                [hemi '.' func '.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
             inPol = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+                [hemi '.' func '.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
             tempEcc = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.coecc.avg.' num2str(splitComb(end-(i-1),:),'%1d') '.prfs.nii.gz']);
+                [hemi '.' func '.cortex.coecc.avg.' num2str(splitComb(end-(i-1),:),'%1d') '.prfs.nii.gz']);
             tempPol = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.copol.avg.' num2str(splitComb(end-(i-1),:),'%1d') '.prfs.nii.gz']);
+                [hemi '.' func '.cortex.copol.avg.' num2str(splitComb(end-(i-1),:),'%1d') '.prfs.nii.gz']);
             [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
             tmp(i) = nanmean(degerror);
         end
@@ -688,7 +705,7 @@ for ss = 1:length(sessions)
 end
 %% Compute error in 'best' coarse templates
 templateType = 'coarse';
-func = 'wdrf.tf';
+func = 's5.wdrf.tf';
 fitType = 'V2V3';
 splitComb = combnk(1:6,3);
 ct = 0;
@@ -697,7 +714,6 @@ for ss = 1:length(sessions)
     pRFDir = fullfile(session_dir,'pRFs','pRF_templates');
     tDir = fullfile(session_dir,'pRFs',templateType,func,'Movie',fitType);
     modelTdir = fullfile(session_dir,'pRFs','coarse_model_templates');
-    %modelTdir = fullfile(session_dir,'pRFs','coarse_model_templates_4params_V2size');
     for hh = 1:length(hemis)
         ct = ct + 1;
         hemi = hemis{hh};
@@ -707,15 +723,15 @@ for ss = 1:length(sessions)
         [varexp,params,sorted_templates] = find_best_template(templateType,tDir,hemi,[],[],[],fitType);
         dotinds = strfind(sorted_templates{1},'.');
         tempEcc = fullfile(modelTdir,...
-            [hemi '.ecc.' sorted_templates{1}(dotinds(1)+1:dotinds(6)-1) '.nii.gz']);
+            [hemi '.ecc.' sorted_templates{1}(dotinds(1)+1:dotinds(4)-1) '.nii.gz']);
         tempPol = fullfile(modelTdir,...
-            [hemi '.pol.' sorted_templates{1}(dotinds(1)+1:dotinds(6)-1) '.nii.gz']);
+            [hemi '.pol.' sorted_templates{1}(dotinds(1)+1:dotinds(4)-1) '.nii.gz']);
         clear tmp
         for i = 1:length(splitComb)
             inEcc = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+                [hemi '.' func '.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
             inPol = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+                [hemi '.' func '.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
             [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
             tmp(i) = nanmean(degerror);
         end
@@ -724,7 +740,7 @@ for ss = 1:length(sessions)
 end
 %% Compute error in 'best' fine templates
 templateType = 'fine';
-func = 'wdrf.tf';
+func = 's5.wdrf.tf';
 fitType = 'V2V3';
 splitComb = combnk(1:6,3);
 ct = 0;
@@ -733,7 +749,6 @@ for ss = 1:length(sessions)
     pRFDir = fullfile(session_dir,'pRFs','pRF_templates');
     tDir = fullfile(session_dir,'pRFs',templateType,func,'Movie',fitType);
     modelTdir = fullfile(session_dir,'pRFs','fine_model_templates');
-    %modelTdir = fullfile(session_dir,'pRFs','coarse_model_templates_4params_V2size');
     for hh = 1:length(hemis)
         ct = ct + 1;
         hemi = hemis{hh};
@@ -743,9 +758,9 @@ for ss = 1:length(sessions)
         [varexp,params,sorted_templates] = find_best_template(templateType,tDir,hemi,[],[],[],fitType);
         dotinds = strfind(sorted_templates{1},'.');
         tempEcc = fullfile(modelTdir,...
-            [hemi '.ecc.' sorted_templates{1}(dotinds(1)+1:dotinds(5)-1) '.nii.gz']);
+            [hemi '.ecc.' sorted_templates{1}(dotinds(1)+1:dotinds(4)-1) '.nii.gz']);
         tempPol = fullfile(modelTdir,...
-            [hemi '.pol.' sorted_templates{1}(dotinds(1)+1:dotinds(5)-1) '.nii.gz']);
+            [hemi '.pol.' sorted_templates{1}(dotinds(1)+1:dotinds(4)-1) '.nii.gz']);
         clear tmp
         for i = 1:length(splitComb)
             inEcc = fullfile(session_dir,'pRFs',...
@@ -759,6 +774,7 @@ for ss = 1:length(sessions)
     end
 end
 %% Compute error in anat templates (deformed)
+func = 's5.wdrf.tf';
 splitComb = combnk(1:6,3);
 ct = 0;
 for ss = 1:length(sessions)
@@ -778,9 +794,9 @@ for ss = 1:length(sessions)
         clear tmp
         for i = 1:length(splitComb)
             inEcc = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+                [hemi '.' func '.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
             inPol = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+                [hemi '.' func '.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
             [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
             tmp(i) = nanmean(degerror);
         end
@@ -788,6 +804,7 @@ for ss = 1:length(sessions)
     end
 end
 %% Compute error in anat templates (non-deformed)
+func = 's5.wdrf.tf';
 splitComb = combnk(1:6,3);
 ct = 0;
 for ss = 1:length(sessions)
@@ -801,15 +818,15 @@ for ss = 1:length(sessions)
         Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
         verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=1;
         tempEcc = fullfile(modelTdir,...
-            [hemi '.ecc.3.2.3.3.3.nii.gz']);
+            [hemi '.ecc.4.4.4.nii.gz']);
         tempPol = fullfile(modelTdir,...
-            [hemi '.pol.3.2.3.3.3.nii.gz']);
+            [hemi '.pol.4.4.4.nii.gz']);
         clear tmp
         for i = 1:length(splitComb)
             inEcc = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+                [hemi '.' func '.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
             inPol = fullfile(session_dir,'pRFs',...
-                [hemi '.wdrf.tf.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+                [hemi '.' func '.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
             [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
             tmp(i) = nanmean(degerror);
         end
@@ -822,26 +839,23 @@ split.mean = mean(splitError.mean);
 split.std = std(splitError.mean);
 anat.mean = mean(anatsplitError.mean);
 anat.std = std(anatsplitError.mean);
-fine.mean = mean(finesplitError.mean);
-fine.std = std(finesplitError.mean);
+%fine.mean = mean(finesplitError.mean);
+%fine.std = std(finesplitError.mean);
 coarse.mean = mean(coarsesplitError.mean);
 coarse.std = std(coarsesplitError.mean);
 nodanat.mean = mean(nondanatsplitError.mean);
 nodanat.std = std(nondanatsplitError.mean);
-fullFigure;bar([split.mean anat.mean fine.mean coarse.mean nodanat.mean]);
+fullFigure;bar([split.mean anat.mean coarse.mean nodanat.mean]);
 hold on;
-errorbar([split.mean anat.mean fine.mean coarse.mean nodanat.mean],...
-    [split.std anat.std fine.std coarse.std nodanat.std],'.','MarkerSize',0.01);
+errorbar([split.mean anat.mean coarse.mean nodanat.mean],...
+    [split.std anat.std coarse.std nodanat.std],'.','MarkerSize',0.01);
 xlabel('Map Type','FontSize',20);
 ylabel('Mean error (degress visual angle)','FontSize',20);
-set(gca,'XTickLabel',{'split-half','anat-deformed','fine','coarse','anat-non-deformed'},'FontSize',15);
+set(gca,'XTickLabel',{'split-half','anat-deformed','coarse','anat-non-deformed'},'FontSize',15);
 axis square
 annotation('textbox',dim,'String','error bars = SD','FontSize',15,'HorizontalAlignment','center');
 title('Error in retinotopy prediction','FontSize',20);
 %%
-
-
-
 
 
 
