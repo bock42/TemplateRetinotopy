@@ -484,7 +484,7 @@ end
 hemis = {'lh' 'rh'};
 templateType = 'coarse';
 func = 's5.wdrf.tf';
-fitTypes = {'V1' 'V2V3'};
+fitTypes = {'V2V3'};%{'V1' 'V2V3'};
 for ss = 1:length(sessions)
     session_dir = sessions{ss};
     disp(session_dir);
@@ -686,7 +686,7 @@ for ss = 1:length(sessions)
         hemi = hemis{hh};
         Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
         Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
-        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=1;
+        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=3;
         clear tmp
         for i = 1:length(splitComb)/2
             inEcc = fullfile(session_dir,'pRFs',...
@@ -719,7 +719,7 @@ for ss = 1:length(sessions)
         hemi = hemis{hh};
         Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
         Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
-        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=1;
+        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=3;
         [varexp,params,sorted_templates] = find_best_template(templateType,tDir,hemi,[],[],[],fitType);
         dotinds = strfind(sorted_templates{1},'.');
         tempEcc = fullfile(modelTdir,...
@@ -754,7 +754,7 @@ for ss = 1:length(sessions)
         hemi = hemis{hh};
         Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
         Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
-        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=1;
+        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=3;
         [varexp,params,sorted_templates] = find_best_template(templateType,tDir,hemi,[],[],[],fitType);
         dotinds = strfind(sorted_templates{1},'.');
         tempEcc = fullfile(modelTdir,...
@@ -786,7 +786,7 @@ for ss = 1:length(sessions)
         hemi = hemis{hh};
         Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
         Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
-        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=1;
+        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=3;
         tempEcc = fullfile(modelTdir,...
             [hemi '.ecc.anat.nii.gz']);
         tempPol = fullfile(modelTdir,...
@@ -816,7 +816,7 @@ for ss = 1:length(sessions)
         hemi = hemis{hh};
         Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
         Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
-        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=1;
+        verts = Ecc.vol<5 & Ecc.vol>1 & abs(Areas.vol)<=3;
         tempEcc = fullfile(modelTdir,...
             [hemi '.ecc.4.4.4.nii.gz']);
         tempPol = fullfile(modelTdir,...
