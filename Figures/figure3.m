@@ -213,11 +213,21 @@ close all
 surface_plot('blueareas',areas.vol,'fsaverage_sym','lh','inflated');
 savefigs('png','areas');
 close all
-%% Compute variance inside and outside stimulated region
-in = ecc.vol<=12;
-out = ecc.vol>12;
-disp(mean(allmean(in&thresh)));
-disp(std(allmean(in&thresh)));
-disp(mean(allmean(out&thresh)));
-disp(std(allmean(out&thresh)));
-[H,P,CI,STATS] = ttest2(allmean(in&thresh),allmean(out&thresh));
+%% Compute correlation inside and outside stimulated region
+cd(figDir);
+inverts = ecc.vol<=12;
+outverts = ecc.vol>12;
+in.mean = mean(allmean(inverts&thresh));
+out.mean = mean(allmean(outverts&thresh));
+in.std = std(allmean(inverts&thresh));
+out.std = std(allmean(outverts&thresh));
+[H,P,CI,STATS] = ttest2(allmean(inverts&thresh),allmean(outverts&thresh));
+fullFigure;
+errorbar([in.mean out.mean],[in.std out.std]);
+ylim([0 1]);
+axis square;
+xlabel('Eccentricity ROI','FontSize',20);
+set(gca,'XTick',[1 2],'XTickLabel',{'<=12' '>12'},'FontSize',20);
+ylabel('Correlation','FontSize',20);
+savefigs('pdf','eccentricity_comparison');
+close all
