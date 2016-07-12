@@ -180,13 +180,11 @@ save(fullfile(figDir,'splitError.mat'),'splitError');
 splitComb = combnk(1:6,3);
 progBar = ProgressBar(length(visualAreas),'computing error...');
 for vv = 1:length(visualAreas)
-    ct = 0;
     for ss = 1:length(sessions)
         session_dir = sessions{ss};
         pRFDir = fullfile(session_dir,'pRFs','pRF_templates');
         modelTdir = fullfile(session_dir,'pRFs','anat_templates');
         for hh = 1:length(hemis)
-            ct = ct + 1;
             hemi = hemis{hh};
             Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
             Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
@@ -204,23 +202,22 @@ for vv = 1:length(visualAreas)
                 [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
                 tmp(i) = nanmean(degerror);
             end
-            anatsplitError(vv).mean(ct) = mean(tmp(:));
+            anatsplitError(vv,ss,hh) = mean(tmp(:));
         end
     end
     progBar(vv);
 end
+save(fullfile(figDir,'anatsplitError.mat'),'anatsplitError');
 %% Compute error in 'best' coarse templates
 splitComb = combnk(1:6,3);
 progBar = ProgressBar(length(visualAreas),'computing error...');
 for vv = 1:length(visualAreas)
-    ct = 0;
     for ss = 1:length(sessions)
         session_dir = sessions{ss};
         pRFDir = fullfile(session_dir,'pRFs','pRF_templates');
         tDir = fullfile(session_dir,'pRFs',templateType,func,'Movie',fitType);
         modelTdir = fullfile(session_dir,'pRFs','coarse_model_templates');
         for hh = 1:length(hemis)
-            ct = ct + 1;
             hemi = hemis{hh};
             Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
             Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
@@ -240,38 +237,41 @@ for vv = 1:length(visualAreas)
                 [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
                 tmp(i) = nanmean(degerror);
             end
-            coarsesplitError(vv).mean(ct) = mean(tmp(:));
+            coarsesplitError(vv,ss,hh) = mean(tmp(:));
         end
     end
     progBar(vv);
 end
+save(fullfile(figDir,'coarsesplitError.mat'),'coarsesplitError');
 %% Compute error in anat templates (non-deformed)
-func = 's5.wdrf.tf';
 splitComb = combnk(1:6,3);
-ct = 0;
-for ss = 1:length(sessions)
-    session_dir = sessions{ss};
-    pRFDir = fullfile(session_dir,'pRFs','pRF_templates');
-    modelTdir = fullfile(session_dir,'pRFs','coarse_model_templates');
-    for hh = 1:length(hemis)
-        ct = ct + 1;
-        hemi = hemis{hh};
-        Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
-        Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
-        verts = Ecc.vol<eLims(2) & Ecc.vol>eLims(1) & ~ismember(abs(Areas.vol),badAreas);
-        tempEcc = fullfile(modelTdir,...
-            [hemi '.ecc.4.4.4.nii.gz']);
-        tempPol = fullfile(modelTdir,...
-            [hemi '.pol.4.4.4.nii.gz']);
-        clear tmp
-        for i = 1:length(splitComb)
-            inEcc = fullfile(session_dir,'pRFs',...
-                [hemi '.' func '.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
-            inPol = fullfile(session_dir,'pRFs',...
-                [hemi '.' func '.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
-            [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
-            tmp(i) = nanmean(degerror);
+progBar = ProgressBar(length(visualAreas),'computing error...');
+for vv = 1:length(visualAreas)
+    for ss = 1:length(sessions)
+        session_dir = sessions{ss};
+        pRFDir = fullfile(session_dir,'pRFs','pRF_templates');
+        modelTdir = fullfile(session_dir,'pRFs','coarse_model_templates');
+        for hh = 1:length(hemis)
+            hemi = hemis{hh};
+            Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
+            Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
+            verts = Ecc.vol<eLims(2) & Ecc.vol>eLims(1) & ~ismember(abs(Areas.vol),badAreas{vv});
+            tempEcc = fullfile(modelTdir,...
+                [hemi '.ecc.4.4.4.nii.gz']);
+            tempPol = fullfile(modelTdir,...
+                [hemi '.pol.4.4.4.nii.gz']);
+            clear tmp
+            for i = 1:length(splitComb)
+                inEcc = fullfile(session_dir,'pRFs',...
+                    [hemi '.' func '.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+                inPol = fullfile(session_dir,'pRFs',...
+                    [hemi '.' func '.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+                [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
+                tmp(i) = nanmean(degerror);
+            end
+            nondanatsplitError(vv,ss,hh) = mean(tmp(:));
         end
-        nondanatsplitError.mean(ct) = mean(tmp(:));
     end
+    progBar(vv);
 end
+save(fullfile(figDir,'nondanatsplitError.mat'),'nondanatsplitError');
