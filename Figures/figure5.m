@@ -18,6 +18,7 @@ hemis = {'lh' 'rh'};
 
 badAreas = [4,5]; % visual areas to exclude;
 eLims = [1 5]; % eccentricity lims [low high];
+
 %% Create the regress template scripts, for 1st and 2nd Halves
 for ss = 1:length(sessions)
     session_dir = sessions{ss};
@@ -175,23 +176,6 @@ axis square;
 legend('Error bars = SD','Location','NorthEast');
 savefigs('pdf','Partitions_vs_Error');
 close all;
-%%
-
-
-
-%% Setup the directories and variables
-dataDir = '/data/jet/abock/data';
-sessions = {...
-    fullfile(dataDir,'Retinotopy_Templates','AEK','10012014') ...
-    fullfile(dataDir,'Retinotopy_Templates','ASB','10272014') ...
-    fullfile(dataDir,'Retinotopy_Templates','GKA','10152014') ...
-    };
-hemis = {'lh' 'rh'};
-badAreas = [4,5]; % visual areas to exclude;
-eLims = [1 5]; % eccentricity lims [low high];
-saveDir = ['/Users/abock/Dropbox (Aguirre-Brainard Lab)/bock/Bock_Aguirre_manuscripts/' ...
-    'Retinotopy_Templates/Figures/Figure6_bar_plots_error/raw'];
-cd(saveDir);
 %% Compute error in split-halves
 func = 's5.wdrf.tf';
 splitComb = combnk(1:6,3);
