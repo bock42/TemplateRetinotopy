@@ -136,9 +136,9 @@ savefigs('pdf','Movie_stimulus_correlation');
 close all;
 %% Plot the error in visual angle separately for V1, V2, and V2 (similar to Figure 5)
 
-%% Compute split error
+%% Compute partition error
 splitComb = combnk(1:6,3);
-splitError = nan(length(visualAreas),length(sessions),63,length(hemis));
+partError = nan(length(visualAreas),length(sessions),63,length(hemis));
 progBar = ProgressBar(length(visualAreas),'computing error...');
 for vv = 1:length(visualAreas)
     for ss = 1:length(sessions)
@@ -169,8 +169,39 @@ for vv = 1:length(visualAreas)
                     [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
                     tmp(i) = nanmean(degerror);
                 end
-                splitError(vv,ss,p,hh) = mean(tmp(:));
+                partError(vv,ss,p,hh) = mean(tmp(:));
             end
+        end
+    end
+    progBar(vv);
+end
+save(fullfile(figDir,'partError.mat'),'partError');
+%% Compute error in split-halves
+splitComb = combnk(1:6,3);
+progBar = ProgressBar(length(visualAreas),'computing error...');
+for vv = 1:length(visualAreas)
+    for ss = 1:length(sessions)
+        session_dir = sessions{ss};
+        pRFDir = fullfile(session_dir,'pRFs','pRF_templates');
+        for hh = 1:length(hemis)
+            hemi = hemis{hh};
+            Ecc = load_nifti(fullfile(pRFDir,[hemi '.ecc.pRF.nii.gz']));
+            Areas = load_nifti(fullfile(pRFDir,[hemi '.areas.pRF.nii.gz']));
+            verts = Ecc.vol<eLims(2) & Ecc.vol>eLims(1) & ~ismember(abs(Areas.vol),badAreas{vv});
+            clear tmp
+            for i = 1:length(splitComb)/2
+                inEcc = fullfile(session_dir,'pRFs',...
+                    [hemi '.' func '.cortex.coecc.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+                inPol = fullfile(session_dir,'pRFs',...
+                    [hemi '.' func '.cortex.copol.avg.' num2str(splitComb(i,:),'%1d') '.prfs.nii.gz']);
+                tempEcc = fullfile(session_dir,'pRFs',...
+                    [hemi '.' func '.cortex.coecc.avg.' num2str(splitComb(end-(i-1),:),'%1d') '.prfs.nii.gz']);
+                tempPol = fullfile(session_dir,'pRFs',...
+                    [hemi '.' func '.cortex.copol.avg.' num2str(splitComb(end-(i-1),:),'%1d') '.prfs.nii.gz']);
+                [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
+                tmp(i) = nanmean(degerror);
+            end
+            splitError(vv,ss,hh) = mean(tmp(:));
         end
     end
     progBar(vv);
@@ -275,3 +306,75 @@ for vv = 1:length(visualAreas)
     progBar(vv);
 end
 save(fullfile(figDir,'nondanatsplitError.mat'),'nondanatsplitError');
+%% Pool all the data
+load(fullfile(figDir,'partError.mat'));
+load(fullfile(figDir,'anatsplitError.mat'));
+load(fullfile(figDir,'coarsesplitError.mat'));
+load(fullfile(figDir,'splitError.mat'));
+load(fullfile(figDir,'nondanatsplitError.mat'));
+dim = [.5 .75 .1 .1];
+% Get the number of partitions in each partition directory
+session_dir = sessions{1}; % It's the same for all session_dir
+aDirs = fullfile(session_dir,'pRFs',templateType,func);
+pDirs = listdir(fullfile(aDirs,'Movie_half*'),'dirs');
+for p = 1:length(pDirs)
+    tdir = fullfile(aDirs,pDirs{p});
+    lInd = strfind(tdir,'leaveOut');
+    numParts(p) = 6 - (length(tdir) - (lInd+7)); % (lInd+7) = length(leaveOut);
+end
+%% Plot the data
+cd(figDir);
+fullFigure;
+for vv = 1:length(visualAreas)
+    subplot(1,3,vv);
+    % partitions
+    for i = 1:max(numParts) % Number of partitions
+        ct = 0;
+        for ss = 1:length(sessions)
+            for hh = 1:length(hemis)
+                ct = ct + 1;
+                tmp = partError(vv,ss,numParts==i,hh);
+                pMeans(i,ct) = mean(tmp(:));
+            end
+        end
+    end
+    for i = 1:max(numParts)
+        tmp = pMeans(i,:);
+        part.mean(i) = mean(tmp(:));
+        part.std(i) = std(tmp(:));
+    end
+    % split
+    tmp = splitError(vv,:,:);
+    sError.mean = tmp(:);
+    % anatomical
+    tmp = anatsplitError(vv,:,:);
+    aError.mean = tmp(:);
+    % coarse
+    tmp = coarsesplitError(vv,:,:);
+    cError.mean = tmp(:);
+    % non-deformed
+    tmp = nondanatsplitError(vv,:,:);
+    dError.mean = tmp(:);
+    % Plot data
+    split.mean = mean(sError.mean);
+    split.std = std(sError.mean);
+    anat.mean = mean(aError.mean);
+    anat.std = std(aError.mean);
+    coarse.mean = mean(cError.mean);
+    coarse.std = std(cError.mean);
+    nodanat.mean = mean(dError.mean);
+    nodanat.std = std(dError.mean);
+    bar([split.mean anat.mean coarse.mean fliplr(part.mean) nodanat.mean]);
+    hold on;
+    errorbar([split.mean anat.mean coarse.mean fliplr(part.mean) nodanat.mean],...
+        [split.std anat.std coarse.std fliplr(part.std) nodanat.std],'.','MarkerSize',0.01);
+    xlabel('Map Type','FontSize',20);
+    ylabel('Mean error (degress visual angle)','FontSize',20);
+    set(gca,'XTickLabel',{'split-half','anat-deformed','coarse',...
+        'part6' 'part5' 'part4' 'part3' 'part2' 'part1' 'anat-non-deformed'},'FontSize',8);
+    axis square
+    title([visualAreas{vv} ' - mean error +/- SD'] ,'FontSize',20);
+    ylim([0 8]);
+end
+savefigs('pdf','templates_error_V1V2V3');
+close all;
