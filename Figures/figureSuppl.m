@@ -40,9 +40,9 @@ for ss = 1:length(sessions)
         V1ind = abs(pRFareas.vol)==1 & rawind;
         V2ind = abs(pRFareas.vol)==2 & rawind;
         V3ind = abs(pRFareas.vol)==3 & rawind;
-        peak.V1(ss,hh) = mean(rawHRF.vol(V1ind));
-        peak.V2(ss,hh) = mean(rawHRF.vol(V2ind));
-        peak.V3(ss,hh) = mean(rawHRF.vol(V3ind));
+        peak.V1(ss,hh) = mean(rawHRF.vol(V1ind)-1);
+        peak.V2(ss,hh) = mean(rawHRF.vol(V2ind)-1);
+        peak.V3(ss,hh) = mean(rawHRF.vol(V3ind)-1);
     end
 end
 HRFpeak(1) = mean(peak.V1(:));
