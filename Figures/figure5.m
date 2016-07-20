@@ -319,5 +319,5 @@ set(gca,'XTickLabel',{'split-half','anat-deformed','coarse','anat-non-deformed'}
 axis square
 annotation('textbox',dim,'String','error bars = SD','FontSize',15,'HorizontalAlignment','center');
 title('Error in retinotopy prediction','FontSize',20);
-%savefigs('pdf','templates_error');
-%close all;
+savefigs('pdf','templates_error');
+close all;
