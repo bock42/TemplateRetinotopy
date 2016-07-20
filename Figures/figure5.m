@@ -16,6 +16,7 @@ V2V3 = '1';
 logDir = '/data/jet/abock/LOGS';
 hemis = {'lh' 'rh'};
 
+fitType = 'V2V3';
 badAreas = [4,5]; % visual areas to exclude;
 eLims = [1 5]; % eccentricity lims [low high];
 
@@ -97,10 +98,9 @@ for ss = 1:length(sessions)
         end
     end
 end
-%% Compute error in 'best' coarse templates
-fitType = 'V2V3';
+%% Compute partition error
 splitComb = combnk(1:6,3);
-splitError = nan(length(sessions),63,length(hemis));
+partError = nan(length(sessions),63,length(hemis));
 for ss = 1:length(sessions)
     session_dir = sessions{ss};
     pRFDir = fullfile(session_dir,'pRFs','pRF_templates');
@@ -130,11 +130,12 @@ for ss = 1:length(sessions)
                 [degerror] = computepRFerror(inEcc,inPol,tempEcc,tempPol,verts);
                 tmp(i) = nanmean(degerror);
             end
-            splitError(ss,p,hh) = mean(tmp(:));
+            partError(ss,p,hh) = mean(tmp(:));
             progBar(p);
         end
     end
 end
+save(fullfile(savedir,'partError.mat'),'partError');
 %% Get the number of partitions in each partition directory
 session_dir = sessions{1}; % It's the same for all session_dir
 aDirs = fullfile(session_dir,'pRFs',templateType,func);
@@ -150,7 +151,7 @@ for i = 1:max(numParts) % Number of partitions
     for ss = 1:length(sessions)
         for hh = 1:length(hemis)
             ct = ct + 1;
-            tmp = splitError(ss,numParts==i,hh);
+            tmp = partError(ss,numParts==i,hh);
             pMeans(i,ct) = mean(tmp(:));
         end
     end
@@ -177,7 +178,6 @@ legend('Error bars = SD','Location','NorthEast');
 savefigs('pdf','Partitions_vs_Error');
 close all;
 %% Compute error in split-halves
-func = 's5.wdrf.tf';
 splitComb = combnk(1:6,3);
 ct = 0;
 for ss = 1:length(sessions)
@@ -205,8 +205,8 @@ for ss = 1:length(sessions)
         splitError.mean(ct) = mean(tmp(:));
     end
 end
+save(fullfile(savedir,'splitError.mat'),'splitError');
 %% Compute error in anat templates (deformed)
-func = 's5.wdrf.tf';
 splitComb = combnk(1:6,3);
 ct = 0;
 for ss = 1:length(sessions)
@@ -235,10 +235,8 @@ for ss = 1:length(sessions)
         anatsplitError.mean(ct) = mean(tmp(:));
     end
 end
+save(fullfile(savedir,'anatsplitError.mat'),'anatsplitError');
 %% Compute error in 'best' coarse templates
-templateType = 'coarse';
-func = 's5.wdrf.tf';
-fitType = 'V2V3';
 splitComb = combnk(1:6,3);
 ct = 0;
 for ss = 1:length(sessions)
@@ -270,8 +268,8 @@ for ss = 1:length(sessions)
         coarsesplitError.mean(ct) = mean(tmp(:));
     end
 end
+save(fullfile(savedir,'coarsesplitError.mat'),'coarsesplitError');
 %% Compute error in anat templates (non-deformed)
-func = 's5.wdrf.tf';
 splitComb = combnk(1:6,3);
 ct = 0;
 for ss = 1:length(sessions)
@@ -300,6 +298,7 @@ for ss = 1:length(sessions)
         nondanatsplitError.mean(ct) = mean(tmp(:));
     end
 end
+save(fullfile(savedir,'nondanatsplitError.mat'),'nondanatsplitError');
 %% Plot error
 dim = [.5 .75 .1 .1];
 split.mean = mean(splitError.mean);
